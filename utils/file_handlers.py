@@ -42,42 +42,23 @@ def parsear_kml_manual(contenido_kml):
                         coord_list.append((lon, lat))
                 if len(coord_list) >= 3:
                     polygons.append(Polygon(coord_list))
-        if not polygons:
-            for multi_geom in root.findall('.//kml:MultiGeometry', namespaces):
-                for polygon_elem in multi_geom.findall('.//kml:Polygon', namespaces):
-                    coords_elem = polygon_elem.find('.//kml:coordinates', namespaces)
-                    if coords_elem is not None and coords_elem.text:
-                        coord_text = coords_elem.text.strip()
-                        coord_list = []
-                        for coord_pair in coord_text.split():
-                            parts = coord_pair.split(',')
-                            if len(parts) >= 2:
-                                lon = float(parts[0])
-                                lat = float(parts[1])
-                                coord_list.append((lon, lat))
-                        if len(coord_list) >= 3:
-                            polygons.append(Polygon(coord_list))
-        if polygons:
-            gdf = gpd.GeoDataFrame({'geometry': polygons}, crs='EPSG:4326')
-            return gdf
-        else:
-            for placemark in root.findall('.//kml:Placemark', namespaces):
-                for elem_name in ['Polygon', 'LineString', 'Point', 'LinearRing']:
-                    elem = placemark.find(f'.//kml:{elem_name}', namespaces)
-                    if elem is not None:
-                        coords_elem = elem.find('.//kml:coordinates', namespaces)
-                        if coords_elem is not None and coords_elem.text:
-                            coord_text = coords_elem.text.strip()
-                            coord_list = []
-                            for coord_pair in coord_text.split():
-                                parts = coord_pair.split(',')
-                                if len(parts) >= 2:
-                                    lon = float(parts[0])
-                                    lat = float(parts[1])
-                                    coord_list.append((lon, lat))
-                            if len(coord_list) >= 3:
-                                polygons.append(Polygon(coord_list))
-                            break
+        
+        # Buscar también en MultiGeometry
+        for multi_geom in root.findall('.//kml:MultiGeometry', namespaces):
+            for polygon_elem in multi_geom.findall('.//kml:Polygon', namespaces):
+                coords_elem = polygon_elem.find('.//kml:coordinates', namespaces)
+                if coords_elem is not None and coords_elem.text:
+                    coord_text = coords_elem.text.strip()
+                    coord_list = []
+                    for coord_pair in coord_text.split():
+                        parts = coord_pair.split(',')
+                        if len(parts) >= 2:
+                            lon = float(parts[0])
+                            lat = float(parts[1])
+                            coord_list.append((lon, lat))
+                    if len(coord_list) >= 3:
+                        polygons.append(Polygon(coord_list))
+        
         if polygons:
             gdf = gpd.GeoDataFrame({'geometry': polygons}, crs='EPSG:4326')
             return gdf
