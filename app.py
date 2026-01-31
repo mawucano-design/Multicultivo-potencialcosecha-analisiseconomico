@@ -87,6 +87,22 @@ def configurar_gee():
     except Exception as e:
         st.error(f"❌ Error configurando Google Earth Engine: {str(e)}")
         return False
+# ===== INICIALIZACIÓN AUTOMÁTICA DE GOOGLE EARTH ENGINE =====
+def inicializar_gee_automaticamente():
+    """Intenta inicializar GEE automáticamente si está disponible"""
+    if GEE_AVAILABLE:
+        try:
+            # Intentar inicializar con credenciales existentes
+            ee.Initialize()
+            return True
+        except Exception as e:
+            st.warning(f"⚠️ Google Earth Engine no pudo inicializarse automáticamente: {str(e)}")
+            return False
+    return False
+
+# Intentar inicializar GEE al cargar la app
+if GEE_AVAILABLE:
+    st.session_state.gee_authenticated = inicializar_gee_automaticamente()
 
 # === ESTILOS PERSONALIZADOS - VERSIÓN PREMIUM MODERNA ===
 st.markdown("""
