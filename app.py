@@ -823,18 +823,80 @@ def mostrar_info_cultivo(cultivo):
         </div>
         """, unsafe_allow_html=True)
 
-# ===== FUNCIONES GOOGLE EARTH ENGINE =====
-def verificar_autenticacion_gee():
-    """Verificar si Google Earth Engine está autenticado"""
-    if not GEE_AVAILABLE:
-        return False
-    
-    try:
-        # Intentar inicializar
-        ee.Initialize()
-        return True
-    except:
-        return False
+# === CONFIGURACIÓN DE GOOGLE EARTH ENGINE (AUTENTICACIÓN ONLINE) ===
+if GEE_AVAILABLE:
+    with st.expander("🔐 Configuración Google Earth Engine"):
+        # Mostrar estado actual
+        if st.session_state.gee_authenticated:
+            st.success("✅ Google Earth Engine autenticado")
+            if st.session_state.gee_project:
+                st.info(f"Proyecto: {st.session_state.gee_project}")
+            
+            if st.button("🗑️ Cerrar sesión GEE", key="logout_gee"):
+                st.session_state.gee_authenticated = False
+                st.session_state.gee_credentials = ''
+                st.session_state.gee_project = ''
+                # Eliminar credenciales guardadas
+                import os
+                cred_path = os.path.expanduser('~/.config/earthengine/credentials')
+                if os.path.exists(cred_path):
+                    os.remove(cred_path)
+                st.success("Sesión de GEE cerrada")
+                st.rerun()
+        else:
+            st.info("✨ Autenticación 100% online: Haz clic abajo y sigue los pasos en tu navegador")
+            
+            # BOTÓN DE AUTENTICACIÓN ONLINE (RECOMENDADO)
+            if st.button("🔑 Autenticar con Google (online)", key="auth_gee_online", type="primary", use_container_width=True):
+                with st.spinner("⏳ Abriendo navegador para autenticación..."):
+                    try:
+                        # Limpiar credenciales anteriores si existen
+                        import os
+                        cred_path = os.path.expanduser('~/.config/earthengine/credentials')
+                        if os.path.exists(cred_path):
+                            os.remove(cred_path)
+                        
+                        # Autenticación OAuth2 interactiva (abre navegador automáticamente)
+                        ee.Authenticate(auth_mode='notebook')  # ¡Este es el secreto!
+                        
+                        # Inicializar con tu proyecto específico
+                        ee.Initialize(project='ee-mawucano25')
+                        
+                        st.session_state.gee_authenticated = True
+                        st.session_state.gee_project = 'ee-mawucano25'
+                        
+                        st.success("✅ ¡Autenticación exitosa! Google Earth Engine está listo para usar.")
+                        st.balloons()
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error en autenticación: {str(e)}")
+                        st.warning("""
+                        **Si el navegador no se abre:**
+                        1. Asegúrate de ejecutar la app en tu máquina local (no en servidor remoto)
+                        2. Verifica que tu navegador predeterminado esté configurado
+                        3. Alternativa: Ejecuta en terminal:
+                           ```bash
+                           earthengine authenticate
+                           ```
+                        """)
+            
+            # Separador visual
+            st.markdown("---")
+            
+            # Opción avanzada (para usuarios que ya autenticaron por terminal)
+            with st.expander("⚙️ Inicializar con credenciales existentes"):
+                st.caption("Usa esta opción si ya ejecutaste `earthengine authenticate` en la terminal")
+                if st.button("🔄 Inicializar GEE", key="init_existing_gee"):
+                    try:
+                        ee.Initialize(project='ee-mawucano25')
+                        st.session_state.gee_authenticated = True
+                        st.session_state.gee_project = 'ee-mawucano25'
+                        st.success("✅ GEE inicializado con credenciales existentes")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+                        st.info("💡 Primero autentica con el botón principal 'Autenticar con Google (online)'")
 
 def obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice='NDVI'):
     """Obtener datos reales de Sentinel-2 usando Google Earth Engine"""
