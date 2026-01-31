@@ -1,3 +1,8 @@
+# app.py - Analizador Multi-Cultivo Satelital con Google Earth Engine
+# Versión: 2.0 - Datos Reales GEE
+# Autor: Sistema de Agricultura de Precisión
+# Fecha: Enero 2026
+
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
@@ -33,7 +38,16 @@ try:
     GEE_AVAILABLE = True
 except ImportError:
     GEE_AVAILABLE = False
-    st.warning("⚠️ Google Earth Engine no está instalado. Para usar datos satelitales reales, instala con: pip install earthengine-api")
+    st.warning("""
+    ⚠️ Google Earth Engine no está instalado. 
+    
+    Para usar datos satelitales reales, instala con: 
+    ```bash
+    pip install earthengine-api
+    ```
+    
+    Luego reinicia la aplicación.
+    """)
 
 warnings.filterwarnings('ignore')
 
@@ -60,424 +74,92 @@ if 'gee_credentials' not in st.session_state:
     st.session_state.gee_credentials = ''
 if 'gee_project' not in st.session_state:
     st.session_state.gee_project = ''
+if 'gee_initialized' not in st.session_state:
+    st.session_state.gee_initialized = False
 
-# === CONFIGURACIÓN DE GOOGLE EARTH ENGINE ===
-def configurar_gee():
-    """Configurar Google Earth Engine con autenticación manual"""
+# === FUNCIONES DE AUTENTICACIÓN GEE MEJORADAS ===
+def inicializar_gee():
+    """Inicializar Google Earth Engine de forma segura"""
     if not GEE_AVAILABLE:
-        return False
+        return False, "GEE no instalado"
     
     try:
-        # Intentar inicializar con las credenciales existentes
+        # Verificar si ya está inicializado
+        if st.session_state.gee_initialized:
+            return True, "Ya inicializado"
+        
+        # Intentar inicializar
+        ee.Initialize()
+        st.session_state.gee_initialized = True
+        st.session_state.gee_authenticated = True
+        
+        # Obtener información del proyecto
         try:
-            ee.Initialize()
-            return True
+            project_info = ee.data.getAssetRoots()
+            if project_info:
+                st.session_state.gee_project = project_info[0]['id']
+            else:
+                st.session_state.gee_project = "Proyecto GEE"
         except:
-            # Si falla, pedir al usuario que se autentique
-            st.warning("""
-            ⚠️ Google Earth Engine no está autenticado.
-            
-            **Para autenticarte:**
-            1. Asegúrate de tener una cuenta de GEE activada: https://earthengine.google.com/
-            2. Instala earthengine-api: `pip install earthengine-api`
-            3. Autentícate desde la terminal: `earthengine authenticate`
-            4. Luego reinicia esta aplicación
-            """)
-            return False
+            st.session_state.gee_project = "Proyecto GEE"
+        
+        return True, "Inicialización exitosa"
+        
+    except ee.EEException as e:
+        if "Please authenticate" in str(e) or "credentials" in str(e):
+            return False, "Requiere autenticación"
+        else:
+            return False, f"Error GEE: {str(e)}"
     except Exception as e:
-        st.error(f"❌ Error configurando Google Earth Engine: {str(e)}")
-        return False
+        return False, f"Error: {str(e)}"
 
-# === ESTILOS PERSONALIZADOS - VERSIÓN PREMIUM MODERNA ===
-st.markdown("""
-<style>
-/* === FONDO GENERAL OSCURO ELEGANTE === */
-.stApp {
-background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
-color: #ffffff !important;
-font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-/* === SIDEBAR: FONDO BLANCO CON TEXTO NEGRO === */
-[data-testid="stSidebar"] {
-background: #ffffff !important;
-border-right: 1px solid #e5e7eb !important;
-box-shadow: 5px 0 25px rgba(0, 0, 0, 0.1) !important;
-}
-/* Texto general del sidebar en NEGRO */
-[data-testid="stSidebar"] *,
-[data-testid="stSidebar"] .stMarkdown,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stText,
-[data-testid="stSidebar"] .stTitle,
-[data-testid="stSidebar"] .stSubheader {
-color: #000000 !important;
-text-shadow: none !important;
-}
-/* Título del sidebar elegante */
-.sidebar-title {
-font-size: 1.4em;
-font-weight: 800;
-margin: 1.5em 0 1em 0;
-text-align: center;
-padding: 14px;
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-border-radius: 16px;
-color: #ffffff !important;
-box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
-border: 1px solid rgba(255, 255, 255, 0.2);
-letter-spacing: 0.5px;
-}
-/* Widgets del sidebar con estilo glassmorphism */
-[data-testid="stSidebar"] .stSelectbox,
-[data-testid="stSidebar"] .stDateInput,
-[data-testid="stSidebar"] .stSlider {
-background: rgba(255, 255, 255, 0.9) !important;
-backdrop-filter: blur(10px);
-border-radius: 12px;
-padding: 12px;
-margin: 8px 0;
-border: 1px solid #d1d5db !important;
-}
-/* Labels de los widgets en negro */
-[data-testid="stSidebar"] .stSelectbox div,
-[data-testid="stSidebar"] .stDateInput div,
-[data-testid="stSidebar"] .stSlider label {
-color: #000000 !important;
-font-weight: 600;
-font-size: 0.95em;
-}
-/* Inputs y selects - fondo blanco con texto negro */
-[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] {
-background-color: #ffffff !important;
-border: 1px solid #d1d5db !important;
-color: #000000 !important;
-border-radius: 8px;
-}
-/* Slider - colores negro */
-[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {
-color: #000000 !important;
-}
-/* Date Input - fondo blanco con texto negro */
-[data-testid="stSidebar"] .stDateInput [data-baseweb="input"] {
-background-color: #ffffff !important;
-border: 1px solid #d1d5db !important;
-color: #000000 !important;
-border-radius: 8px;
-}
-/* Placeholder en gris */
-[data-testid="stSidebar"] .stDateInput [data-baseweb="input"]::placeholder {
-color: #6b7280 !important;
-}
-/* Botones premium */
-.stButton > button {
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-color: white !important;
-border: none !important;
-padding: 0.8em 1.5em !important;
-border-radius: 12px !important;
-font-weight: 700 !important;
-font-size: 1em !important;
-box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
-transition: all 0.3s ease !important;
-text-transform: uppercase !important;
-letter-spacing: 0.5px !important;
-}
-.stButton > button:hover {
-transform: translateY(-3px) !important;
-box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6) !important;
-background: linear-gradient(135deg, #4f8df8 0%, #2d5fe8 100%) !important;
-}
-/* === HERO BANNER PRINCIPAL CON IMAGEN === */
-.hero-banner {
-background: linear-gradient(rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.95)),
-url('https://images.unsplash.com/photo-1597981309443-6e2d2a4d9c3f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80') !important;
-background-size: cover !important;
-background-position: center 40% !important;
-padding: 3.5em 2em !important;
-border-radius: 24px !important;
-margin-bottom: 2.5em !important;
-box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
-border: 1px solid rgba(59, 130, 246, 0.2) !important;
-position: relative !important;
-overflow: hidden !important;
-}
-.hero-banner::before {
-content: '' !important;
-position: absolute !important;
-top: 0 !important;
-left: 0 !important;
-right: 0 !important;
-bottom: 0 !important;
-background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(29, 78, 216, 0.05)) !important;
-z-index: 1 !important;
-}
-.hero-content {
-position: relative !important;
-z-index: 2 !important;
-text-align: center !important;
-}
-.hero-title {
-color: #ffffff !important;
-font-size: 3.2em !important;
-font-weight: 900 !important;
-margin-bottom: 0.3em !important;
-text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
-letter-spacing: -0.5px !important;
-background: linear-gradient(135deg, #ffffff 0%, #93c5fd 100%) !important;
--webkit-background-clip: text !important;
--webkit-text-fill-color: transparent !important;
-background-clip: text !important;
-}
-.hero-subtitle {
-color: #cbd5e1 !important;
-font-size: 1.3em !important;
-font-weight: 400 !important;
-max-width: 800px !important;
-margin: 0 auto !important;
-line-height: 1.6 !important;
-}
-/* === PESTAÑAS PRINCIPALES (fuera del sidebar) - SIN CAMBIOS === */
-.stTabs [data-baseweb="tab-list"] {
-background: rgba(255, 255, 255, 0.05) !important;
-backdrop-filter: blur(10px) !important;
-padding: 8px 16px !important;
-border-radius: 16px !important;
-border: 1px solid rgba(255, 255, 255, 0.1) !important;
-margin-top: 1em !important;
-gap: 8px !important;
-}
-.stTabs [data-baseweb="tab"] {
-color: #94a3b8 !important;
-font-weight: 600 !important;
-padding: 12px 24px !important;
-border-radius: 12px !important;
-background: transparent !important;
-transition: all 0.3s ease !important;
-border: 1px solid transparent !important;
-}
-.stTabs [data-baseweb="tab"]:hover {
-color: #ffffff !important;
-background: rgba(59, 130, 246, 0.2) !important;
-border-color: rgba(59, 130, 246, 0.3) !important;
-transform: translateY(-2px) !important;
-}
-.stTabs [aria-selected="true"] {
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-color: #ffffff !important;
-font-weight: 700 !important;
-border: none !important;
-box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
-}
-/* === PESTAÑAS DEL SIDEBAR: FONDO BLANCO + TEXTO NEGRO === */
-[data-testid="stSidebar"] .stTabs [data-baseweb="tab-list"] {
-background: #ffffff !important;
-border: 1px solid #e2e8f0 !important;
-padding: 8px !important;
-border-radius: 12px !important;
-gap: 6px !important;
-}
-[data-testid="stSidebar"] .stTabs [data-baseweb="tab"] {
-color: #000000 !important;
-background: transparent !important;
-border-radius: 8px !important;
-padding: 8px 16px !important;
-font-weight: 600 !important;
-border: 1px solid transparent !important;
-}
-[data-testid="stSidebar"] .stTabs [data-baseweb="tab"]:hover {
-background: #f1f5f9 !important;
-color: #000000 !important;
-border-color: #cbd5e1 !important;
-}
-/* Pestaña activa en el sidebar: blanco con texto negro */
-[data-testid="stSidebar"] .stTabs [aria-selected="true"] {
-background: #ffffff !important;
-color: #000000 !important;
-font-weight: 700 !important;
-border: 1px solid #3b82f6 !important;
-}
-/* === MÉTRICAS PREMIUM === */
-div[data-testid="metric-container"] {
-background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9)) !important;
-backdrop-filter: blur(10px) !important;
-border-radius: 20px !important;
-padding: 24px !important;
-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-border: 1px solid rgba(59, 130, 246, 0.2) !important;
-transition: all 0.3s ease !important;
-}
-div[data-testid="metric-container"]:hover {
-transform: translateY(-5px) !important;
-box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2) !important;
-border-color: rgba(59, 130, 246, 0.4) !important;
-}
-div[data-testid="metric-container"] label,
-div[data-testid="metric-container"] div,
-div[data-testid="metric-container"] [data-testid="stMetricValue"],
-div[data-testid="metric-container"] [data-testid="stMetricLabel"] {
-color: #ffffff !important;
-font-weight: 600 !important;
-}
-div[data-testid="metric-container"] [data-testid="stMetricValue"] {
-font-size: 2.5em !important;
-font-weight: 800 !important;
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
--webkit-background-clip: text !important;
--webkit-text-fill-color: transparent !important;
-background-clip: text !important;
-}
-/* === GRÁFICOS CON ESTILO OSCURO === */
-.stPlotlyChart, .stPyplot {
-background: rgba(15, 23, 42, 0.8) !important;
-backdrop-filter: blur(10px) !important;
-border-radius: 20px !important;
-padding: 20px !important;
-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-border: 1px solid rgba(59, 130, 246, 0.2) !important;
-}
-/* === EXPANDERS ELEGANTES === */
-.streamlit-expanderHeader {
-color: #ffffff !important;
-background: rgba(30, 41, 59, 0.8) !important;
-backdrop-filter: blur(10px) !important;
-border-radius: 16px !important;
-font-weight: 700 !important;
-border: 1px solid rgba(255, 255, 255, 0.1) !important;
-padding: 16px 20px !important;
-margin-bottom: 10px !important;
-}
-.streamlit-expanderContent {
-background: rgba(15, 23, 42, 0.6) !important;
-border-radius: 0 0 16px 16px !important;
-padding: 20px !important;
-border: 1px solid rgba(255, 255, 255, 0.1) !important;
-border-top: none !important;
-}
-/* === TEXTOS GENERALES === */
-h1, h2, h3, h4, h5, h6 {
-color: #ffffff !important;
-font-weight: 800 !important;
-margin-top: 1.5em !important;
-}
-p, div, span, label, li {
-color: #cbd5e1 !important;
-line-height: 1.7 !important;
-}
-/* === DATA FRAMES TABLAS ELEGANTES === */
-.dataframe {
-background: rgba(15, 23, 42, 0.8) !important;
-backdrop-filter: blur(10px) !important;
-border-radius: 16px !important;
-border: 1px solid rgba(255, 255, 255, 0.1) !important;
-color: #ffffff !important;
-}
-.dataframe th {
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-color: #ffffff !important;
-font-weight: 700 !important;
-padding: 16px !important;
-}
-.dataframe td {
-color: #cbd5e1 !important;
-padding: 14px 16px !important;
-border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-/* === ALERTS Y MENSAJES === */
-.stAlert {
-border-radius: 16px !important;
-border: 1px solid rgba(255, 255, 255, 0.1) !important;
-backdrop-filter: blur(10px) !important;
-}
-/* === SCROLLBAR PERSONALIZADA === */
-::-webkit-scrollbar {
-width: 10px !important;
-height: 10px !important;
-}
-::-webkit-scrollbar-track {
-background: rgba(15, 23, 42, 0.8) !important;
-border-radius: 10px !important;
-}
-::-webkit-scrollbar-thumb {
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-border-radius: 10px !important;
-}
-::-webkit-scrollbar-thumb:hover {
-background: linear-gradient(135deg, #4f8df8 0%, #2d5fe8 100%) !important;
-}
-/* === TARJETAS DE CULTIVOS === */
-.cultivo-card {
-background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
-border-radius: 20px !important;
-padding: 25px !important;
-border: 1px solid rgba(59, 130, 246, 0.2) !important;
-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-transition: all 0.3s ease !important;
-height: 100% !important;
-}
-.cultivo-card:hover {
-transform: translateY(-8px) !important;
-box-shadow: 0 20px 40px rgba(59, 130, 246, 0.2) !important;
-border-color: rgba(59, 130, 246, 0.4) !important;
-}
-/* === TABLERO DE CONTROL === */
-.dashboard-grid {
-display: grid !important;
-grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
-gap: 25px !important;
-margin: 30px 0 !important;
-}
-.dashboard-card {
-background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
-border-radius: 20px !important;
-padding: 25px !important;
-border: 1px solid rgba(59, 130, 246, 0.2) !important;
-box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-transition: all 0.3s ease !important;
-}
-.dashboard-card:hover {
-transform: translateY(-5px) !important;
-box-shadow: 0 20px 40px rgba(59, 130, 246, 0.2) !important;
-}
-/* === STATS BADGES === */
-.stats-badge {
-display: inline-block !important;
-padding: 6px 14px !important;
-border-radius: 50px !important;
-font-size: 0.85em !important;
-font-weight: 700 !important;
-margin: 2px !important;
-}
-.badge-success {
-background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-color: white !important;
-}
-.badge-warning {
-background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
-color: white !important;
-}
-.badge-danger {
-background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-color: white !important;
-}
-.badge-info {
-background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
-color: white !important;
-}
-</style>
-""", unsafe_allow_html=True)
+def autenticar_con_cuenta_servicio(creds_file):
+    """Autenticar con cuenta de servicio Google Cloud"""
+    try:
+        # Leer y procesar credenciales
+        import tempfile
+        
+        creds_content = creds_file.read().decode('utf-8')
+        creds_data = json.loads(creds_content)
+        
+        # Guardar en archivo temporal
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(creds_data, f)
+            creds_path = f.name
+        
+        # Inicializar con credenciales de servicio
+        credentials = ee.ServiceAccountCredentials(
+            email=creds_data.get('client_email', ''),
+            key_file=creds_path
+        )
+        ee.Initialize(credentials)
+        
+        st.session_state.gee_authenticated = True
+        st.session_state.gee_initialized = True
+        st.session_state.gee_project = creds_data.get('project_id', 'Proyecto GEE')
+        
+        # Limpiar archivo temporal
+        os.unlink(creds_path)
+        
+        return True, "Autenticación con cuenta de servicio exitosa"
+        
+    except Exception as e:
+        return False, f"Error con las credenciales: {str(e)}"
 
-# ===== HERO BANNER PRINCIPAL =====
-st.markdown("""
-<div class="hero-banner">
-<div class="hero-content">
-<h1 class="hero-title">ANALIZADOR MULTI-CULTIVO SATELITAL</h1>
-<p class="hero-subtitle">Potenciado con NASA POWER, Google Earth Engine y datos SRTM para agricultura de precisión</p>
-</div>
-</div>
-""", unsafe_allow_html=True)
+def verificar_conexion_gee():
+    """Verificar conexión con Google Earth Engine"""
+    if not GEE_AVAILABLE:
+        return False, "GEE no instalado"
+    
+    try:
+        # Intentar una operación simple
+        test_image = ee.Image('COPERNICUS/S2_SR_HARMONIZED').select('B4').limit(1)
+        info = test_image.getInfo()
+        return True, "Conexión exitosa"
+    except Exception as e:
+        return False, f"Error de conexión: {str(e)}"
 
-# ===== CONFIGURACIÓN DE SATÉLITES DISPONIBLES =====
+# === CONFIGURACIÓN DE SATÉLITES DISPONIBLES ===
 SATELITES_DISPONIBLES = {
     'SENTINEL-2_GEE': {
         'nombre': 'Sentinel-2 (Google Earth Engine)',
@@ -532,7 +214,7 @@ SATELITES_DISPONIBLES = {
     }
 }
 
-# ===== CONFIGURACIÓN VARIEDADES ARGENTINAS =====
+# === CONFIGURACIÓN VARIEDADES ARGENTINAS ===
 VARIEDADES_ARGENTINA = {
     'TRIGO': [
         'ACA 303', 'ACA 315', 'Baguette Premium 11', 'Baguette Premium 13', 
@@ -566,237 +248,403 @@ VARIEDADES_ARGENTINA = {
     ]
 }
 
-# ===== CONFIGURACIÓN NUEVOS CULTIVOS =====
+# === CONFIGURACIÓN NUEVOS CULTIVOS ===
 PARAMETROS_CULTIVOS = {
-'TRIGO': {
-'NITROGENO': {'min': 100, 'max': 180},
-'FOSFORO': {'min': 40, 'max': 80},
-'POTASIO': {'min': 90, 'max': 150},
-'MATERIA_ORGANICA_OPTIMA': 3.5,
-'HUMEDAD_OPTIMA': 0.28,
-'NDVI_OPTIMO': 0.75,
-'NDRE_OPTIMO': 0.40,
-'RENDIMIENTO_OPTIMO': 4500,
-'COSTO_FERTILIZACION': 350,
-'PRECIO_VENTA': 0.25,
-'VARIEDADES': VARIEDADES_ARGENTINA['TRIGO'],
-'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
-},
-'MAIZ': {
-'NITROGENO': {'min': 150, 'max': 250},
-'FOSFORO': {'min': 50, 'max': 90},
-'POTASIO': {'min': 120, 'max': 200},
-'MATERIA_ORGANICA_OPTIMA': 3.8,
-'HUMEDAD_OPTIMA': 0.32,
-'NDVI_OPTIMO': 0.80,
-'NDRE_OPTIMO': 0.45,
-'RENDIMIENTO_OPTIMO': 8500,
-'COSTO_FERTILIZACION': 550,
-'PRECIO_VENTA': 0.20,
-'VARIEDADES': VARIEDADES_ARGENTINA['MAIZ'],
-'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste', 'Cuyo']
-},
-'SORGO': {
-'NITROGENO': {'min': 80, 'max': 140},
-'FOSFORO': {'min': 35, 'max': 65},
-'POTASIO': {'min': 100, 'max': 180},
-'MATERIA_ORGANICA_OPTIMA': 3.0,
-'HUMEDAD_OPTIMA': 0.25,
-'NDVI_OPTIMO': 0.70,
-'NDRE_OPTIMO': 0.35,
-'RENDIMIENTO_OPTIMO': 5000,
-'COSTO_FERTILIZACION': 300,
-'PRECIO_VENTA': 0.18,
-'VARIEDADES': VARIEDADES_ARGENTINA['SORGO'],
-'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
-},
-'SOJA': {
-'NITROGENO': {'min': 20, 'max': 40},
-'FOSFORO': {'min': 45, 'max': 85},
-'POTASIO': {'min': 140, 'max': 220},
-'MATERIA_ORGANICA_OPTIMA': 3.5,
-'HUMEDAD_OPTIMA': 0.30,
-'NDVI_OPTIMO': 0.78,
-'NDRE_OPTIMO': 0.42,
-'RENDIMIENTO_OPTIMO': 3200,
-'COSTO_FERTILIZACION': 400,
-'PRECIO_VENTA': 0.45,
-'VARIEDADES': VARIEDADES_ARGENTINA['SOJA'],
-'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
-},
-'GIRASOL': {
-'NITROGENO': {'min': 70, 'max': 120},
-'FOSFORO': {'min': 40, 'max': 75},
-'POTASIO': {'min': 110, 'max': 190},
-'MATERIA_ORGANICA_OPTIMA': 3.2,
-'HUMEDAD_OPTIMA': 0.26,
-'NDVI_OPTIMO': 0.72,
-'NDRE_OPTIMO': 0.38,
-'RENDIMIENTO_OPTIMO': 2800,
-'COSTO_FERTILIZACION': 320,
-'PRECIO_VENTA': 0.35,
-'VARIEDADES': VARIEDADES_ARGENTINA['GIRASOL'],
-'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
-},
-'MANI': {
-'NITROGENO': {'min': 15, 'max': 30},
-'FOSFORO': {'min': 50, 'max': 90},
-'POTASIO': {'min': 80, 'max': 140},
-'MATERIA_ORGANICA_OPTIMA': 2.8,
-'HUMEDAD_OPTIMA': 0.22,
-'NDVI_OPTIMO': 0.68,
-'NDRE_OPTIMO': 0.32,
-'RENDIMIENTO_OPTIMO': 3800,
-'COSTO_FERTILIZACION': 380,
-'PRECIO_VENTA': 0.60,
-'VARIEDADES': VARIEDADES_ARGENTINA['MANI'],
-'ZONAS_ARGENTINA': ['Córdoba', 'San Luis', 'La Pampa']
-}
+    'TRIGO': {
+        'NITROGENO': {'min': 100, 'max': 180},
+        'FOSFORO': {'min': 40, 'max': 80},
+        'POTASIO': {'min': 90, 'max': 150},
+        'MATERIA_ORGANICA_OPTIMA': 3.5,
+        'HUMEDAD_OPTIMA': 0.28,
+        'NDVI_OPTIMO': 0.75,
+        'NDRE_OPTIMO': 0.40,
+        'RENDIMIENTO_OPTIMO': 4500,
+        'COSTO_FERTILIZACION': 350,
+        'PRECIO_VENTA': 0.25,
+        'VARIEDADES': VARIEDADES_ARGENTINA['TRIGO'],
+        'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
+    },
+    'MAIZ': {
+        'NITROGENO': {'min': 150, 'max': 250},
+        'FOSFORO': {'min': 50, 'max': 90},
+        'POTASIO': {'min': 120, 'max': 200},
+        'MATERIA_ORGANICA_OPTIMA': 3.8,
+        'HUMEDAD_OPTIMA': 0.32,
+        'NDVI_OPTIMO': 0.80,
+        'NDRE_OPTIMO': 0.45,
+        'RENDIMIENTO_OPTIMO': 8500,
+        'COSTO_FERTILIZACION': 550,
+        'PRECIO_VENTA': 0.20,
+        'VARIEDADES': VARIEDADES_ARGENTINA['MAIZ'],
+        'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste', 'Cuyo']
+    },
+    'SORGO': {
+        'NITROGENO': {'min': 80, 'max': 140},
+        'FOSFORO': {'min': 35, 'max': 65},
+        'POTASIO': {'min': 100, 'max': 180},
+        'MATERIA_ORGANICA_OPTIMA': 3.0,
+        'HUMEDAD_OPTIMA': 0.25,
+        'NDVI_OPTIMO': 0.70,
+        'NDRE_OPTIMO': 0.35,
+        'RENDIMIENTO_OPTIMO': 5000,
+        'COSTO_FERTILIZACION': 300,
+        'PRECIO_VENTA': 0.18,
+        'VARIEDADES': VARIEDADES_ARGENTINA['SORGO'],
+        'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
+    },
+    'SOJA': {
+        'NITROGENO': {'min': 20, 'max': 40},
+        'FOSFORO': {'min': 45, 'max': 85},
+        'POTASIO': {'min': 140, 'max': 220},
+        'MATERIA_ORGANICA_OPTIMA': 3.5,
+        'HUMEDAD_OPTIMA': 0.30,
+        'NDVI_OPTIMO': 0.78,
+        'NDRE_OPTIMO': 0.42,
+        'RENDIMIENTO_OPTIMO': 3200,
+        'COSTO_FERTILIZACION': 400,
+        'PRECIO_VENTA': 0.45,
+        'VARIEDADES': VARIEDADES_ARGENTINA['SOJA'],
+        'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
+    },
+    'GIRASOL': {
+        'NITROGENO': {'min': 70, 'max': 120},
+        'FOSFORO': {'min': 40, 'max': 75},
+        'POTASIO': {'min': 110, 'max': 190},
+        'MATERIA_ORGANICA_OPTIMA': 3.2,
+        'HUMEDAD_OPTIMA': 0.26,
+        'NDVI_OPTIMO': 0.72,
+        'NDRE_OPTIMO': 0.38,
+        'RENDIMIENTO_OPTIMO': 2800,
+        'COSTO_FERTILIZACION': 320,
+        'PRECIO_VENTA': 0.35,
+        'VARIEDADES': VARIEDADES_ARGENTINA['GIRASOL'],
+        'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
+    },
+    'MANI': {
+        'NITROGENO': {'min': 15, 'max': 30},
+        'FOSFORO': {'min': 50, 'max': 90},
+        'POTASIO': {'min': 80, 'max': 140},
+        'MATERIA_ORGANICA_OPTIMA': 2.8,
+        'HUMEDAD_OPTIMA': 0.22,
+        'NDVI_OPTIMO': 0.68,
+        'NDRE_OPTIMO': 0.32,
+        'RENDIMIENTO_OPTIMO': 3800,
+        'COSTO_FERTILIZACION': 380,
+        'PRECIO_VENTA': 0.60,
+        'VARIEDADES': VARIEDADES_ARGENTINA['MANI'],
+        'ZONAS_ARGENTINA': ['Córdoba', 'San Luis', 'La Pampa']
+    }
 }
 
 TEXTURA_SUELO_OPTIMA = {
-'TRIGO': {
-'textura_optima': 'Franco-arcilloso',
-'arena_optima': 35,
-'limo_optima': 40,
-'arcilla_optima': 25,
-'densidad_aparente_optima': 1.35,
-'porosidad_optima': 0.48
-},
-'MAIZ': {
-'textura_optima': 'Franco',
-'arena_optima': 45,
-'limo_optima': 35,
-'arcilla_optima': 20,
-'densidad_aparente_optima': 1.30,
-'porosidad_optima': 0.50
-},
-'SORGO': {
-'textura_optima': 'Franco-arenoso',
-'arena_optima': 55,
-'limo_optima': 30,
-'arcilla_optima': 15,
-'densidad_aparente_optima': 1.40,
-'porosidad_optima': 0.45
-},
-'SOJA': {
-'textura_optima': 'Franco',
-'arena_optima': 40,
-'limo_optima': 40,
-'arcilla_optima': 20,
-'densidad_aparente_optima': 1.25,
-'porosidad_optima': 0.52
-},
-'GIRASOL': {
-'textura_optima': 'Franco-arcilloso',
-'arena_optima': 30,
-'limo_optima': 45,
-'arcilla_optima': 25,
-'densidad_aparente_optima': 1.32,
-'porosidad_optima': 0.49
-},
-'MANI': {
-'textura_optima': 'Franco-arenoso',
-'arena_optima': 60,
-'limo_optima': 25,
-'arcilla_optima': 15,
-'densidad_aparente_optima': 1.38,
-'porosidad_optima': 0.46
-}
+    'TRIGO': {
+        'textura_optima': 'Franco-arcilloso',
+        'arena_optima': 35,
+        'limo_optima': 40,
+        'arcilla_optima': 25,
+        'densidad_aparente_optima': 1.35,
+        'porosidad_optima': 0.48
+    },
+    'MAIZ': {
+        'textura_optima': 'Franco',
+        'arena_optima': 45,
+        'limo_optima': 35,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.30,
+        'porosidad_optima': 0.50
+    },
+    'SORGO': {
+        'textura_optima': 'Franco-arenoso',
+        'arena_optima': 55,
+        'limo_optima': 30,
+        'arcilla_optima': 15,
+        'densidad_aparente_optima': 1.40,
+        'porosidad_optima': 0.45
+    },
+    'SOJA': {
+        'textura_optima': 'Franco',
+        'arena_optima': 40,
+        'limo_optima': 40,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.25,
+        'porosidad_optima': 0.52
+    },
+    'GIRASOL': {
+        'textura_optima': 'Franco-arcilloso',
+        'arena_optima': 30,
+        'limo_optima': 45,
+        'arcilla_optima': 25,
+        'densidad_aparente_optima': 1.32,
+        'porosidad_optima': 0.49
+    },
+    'MANI': {
+        'textura_optima': 'Franco-arenoso',
+        'arena_optima': 60,
+        'limo_optima': 25,
+        'arcilla_optima': 15,
+        'densidad_aparente_optima': 1.38,
+        'porosidad_optima': 0.46
+    }
 }
 
 CLASIFICACION_PENDIENTES = {
-'PLANA (0-2%)': {'min': 0, 'max': 2, 'color': '#4daf4a', 'factor_erosivo': 0.1},
-'SUAVE (2-5%)': {'min': 2, 'max': 5, 'color': '#a6d96a', 'factor_erosivo': 0.3},
-'MODERADA (5-10%)': {'min': 5, 'max': 10, 'color': '#ffffbf', 'factor_erosivo': 0.6},
-'FUERTE (10-15%)': {'min': 10, 'max': 15, 'color': '#fdae61', 'factor_erosivo': 0.8},
-'MUY FUERTE (15-25%)': {'min': 15, 'max': 25, 'color': '#f46d43', 'factor_erosivo': 0.9},
-'EXTREMA (>25%)': {'min': 25, 'max': 100, 'color': '#d73027', 'factor_erosivo': 1.0}
-}
-
-RECOMENDACIONES_TEXTURA = {
-'Franco': {
-'propiedades': [
-"Equilibrio arena-limo-arcilla",
-"Buena aireación y drenaje",
-"CIC intermedia-alta",
-"Retención de agua adecuada"
-],
-'limitantes': [
-"Puede compactarse con maquinaria pesada",
-"Erosión en pendientes si no hay cobertura"
-],
-'manejo': [
-"Mantener coberturas vivas o muertas",
-"Evitar tránsito excesivo de maquinaria",
-"Fertilización eficiente"
-]
-},
-'Franco arcilloso': {
-'propiedades': [
-"Mayor proporción de arcilla (25–35%)",
-"Alta retención de agua y nutrientes",
-"Drenaje natural lento",
-"Buena fertilidad natural"
-],
-'limitantes': [
-"Riesgo de encharcamiento",
-"Compactación fácil",
-"Menor oxigenación radicular"
-],
-'manejo': [
-"Implementar drenajes",
-"Subsolado previo a siembra",
-"Incorporar materia orgánica"
-]
-},
-'Franco arenoso': {
-'propiedades': [
-"Arena 55-70%, arcilla 10-20%",
-"Buen desarrollo radicular",
-"Drenaje rápido",
-"Retención de agua baja"
-],
-'limitantes': [
-"Riesgo de lixiviación de nutrientes",
-"Estrés hídrico en veranos",
-"Fertilidad baja"
-],
-'manejo': [
-"Uso de coberturas leguminosas",
-"Aplicar mulching",
-"Riego suplementario en sequía",
-"Fertilización fraccionada"
-]
-}
+    'PLANA (0-2%)': {'min': 0, 'max': 2, 'color': '#4daf4a', 'factor_erosivo': 0.1},
+    'SUAVE (2-5%)': {'min': 2, 'max': 5, 'color': '#a6d96a', 'factor_erosivo': 0.3},
+    'MODERADA (5-10%)': {'min': 5, 'max': 10, 'color': '#ffffbf', 'factor_erosivo': 0.6},
+    'FUERTE (10-15%)': {'min': 10, 'max': 15, 'color': '#fdae61', 'factor_erosivo': 0.8},
+    'MUY FUERTE (15-25%)': {'min': 15, 'max': 25, 'color': '#f46d43', 'factor_erosivo': 0.9},
+    'EXTREMA (>25%)': {'min': 25, 'max': 100, 'color': '#d73027', 'factor_erosivo': 1.0}
 }
 
 ICONOS_CULTIVOS = {
-'TRIGO': '🌾',
-'MAIZ': '🌽',
-'SORGO': '🌾',
-'SOJA': '🫘',
-'GIRASOL': '🌻',
-'MANI': '🥜'
+    'TRIGO': '🌾',
+    'MAIZ': '🌽',
+    'SORGO': '🌾',
+    'SOJA': '🫘',
+    'GIRASOL': '🌻',
+    'MANI': '🥜'
 }
+
 COLORES_CULTIVOS = {
-'TRIGO': '#FFD700',
-'MAIZ': '#F4A460',
-'SORGO': '#8B4513',
-'SOJA': '#228B22',
-'GIRASOL': '#FFD700',
-'MANI': '#D2691E'
+    'TRIGO': '#FFD700',
+    'MAIZ': '#F4A460',
+    'SORGO': '#8B4513',
+    'SOJA': '#228B22',
+    'GIRASOL': '#FFD700',
+    'MANI': '#D2691E'
 }
 
 PALETAS_GEE = {
-'FERTILIDAD': ['#d73027', '#f46d43', '#fdae61', '#fee08b', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'],
-'NITROGENO': ['#00ff00', '#80ff00', '#ffff00', '#ff8000', '#ff0000'],
-'FOSFORO': ['#0000ff', '#4040ff', '#8080ff', '#c0c0ff', '#ffffff'],
-'POTASIO': ['#4B0082', '#6A0DAD', '#8A2BE2', '#9370DB', '#D8BFD8'],
-'TEXTURA': ['#8c510a', '#d8b365', '#f6e8c3', '#c7eae5', '#5ab4ac', '#01665e'],
-'ELEVACION': ['#006837', '#1a9850', '#66bd63', '#a6d96a', '#d9ef8b', '#ffffbf', '#fee08b', '#fdae61', '#f46d43', '#d73027'],
-'PENDIENTE': ['#4daf4a', '#a6d96a', '#ffffbf', '#fdae61', '#f46d43', '#d73027']
+    'FERTILIDAD': ['#d73027', '#f46d43', '#fdae61', '#fee08b', '#d9ef8b', '#a6d96a', '#66bd63', '#1a9850', '#006837'],
+    'NITROGENO': ['#00ff00', '#80ff00', '#ffff00', '#ff8000', '#ff0000'],
+    'FOSFORO': ['#0000ff', '#4040ff', '#8080ff', '#c0c0ff', '#ffffff'],
+    'POTASIO': ['#4B0082', '#6A0DAD', '#8A2BE2', '#9370DB', '#D8BFD8'],
+    'TEXTURA': ['#8c510a', '#d8b365', '#f6e8c3', '#c7eae5', '#5ab4ac', '#01665e'],
+    'ELEVACION': ['#006837', '#1a9850', '#66bd63', '#a6d96a', '#d9ef8b', '#ffffbf', '#fee08b', '#fdae61', '#f46d43', '#d73027'],
+    'PENDIENTE': ['#4daf4a', '#a6d96a', '#ffffbf', '#fdae61', '#f46d43', '#d73027']
 }
+
+# === ESTILOS PERSONALIZADOS - VERSIÓN PREMIUM MODERNA ===
+st.markdown("""
+<style>
+/* === FONDO GENERAL OSCURO ELEGANTE === */
+.stApp {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+    color: #ffffff !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* === SIDEBAR: FONDO BLANCO CON TEXTO NEGRO === */
+[data-testid="stSidebar"] {
+    background: #ffffff !important;
+    border-right: 1px solid #e5e7eb !important;
+    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-testid="stSidebar"] *,
+[data-testid="stSidebar"] .stMarkdown,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stText,
+[data-testid="stSidebar"] .stTitle,
+[data-testid="stSidebar"] .stSubheader {
+    color: #000000 !important;
+    text-shadow: none !important;
+}
+
+.sidebar-title {
+    font-size: 1.4em;
+    font-weight: 800;
+    margin: 1.5em 0 1em 0;
+    text-align: center;
+    padding: 14px;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    border-radius: 16px;
+    color: #ffffff !important;
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    letter-spacing: 0.5px;
+}
+
+/* === HERO BANNER PRINCIPAL CON IMAGEN === */
+.hero-banner {
+    background: linear-gradient(rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.95)),
+                url('https://images.unsplash.com/photo-1597981309443-6e2d2a4d9c3f?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80') !important;
+    background-size: cover !important;
+    background-position: center 40% !important;
+    padding: 3.5em 2em !important;
+    border-radius: 24px !important;
+    margin-bottom: 2.5em !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.hero-banner::before {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(29, 78, 216, 0.05)) !important;
+    z-index: 1 !important;
+}
+
+.hero-content {
+    position: relative !important;
+    z-index: 2 !important;
+    text-align: center !important;
+}
+
+.hero-title {
+    color: #ffffff !important;
+    font-size: 3.2em !important;
+    font-weight: 900 !important;
+    margin-bottom: 0.3em !important;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+    letter-spacing: -0.5px !important;
+    background: linear-gradient(135deg, #ffffff 0%, #93c5fd 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+.hero-subtitle {
+    color: #cbd5e1 !important;
+    font-size: 1.3em !important;
+    font-weight: 400 !important;
+    max-width: 800px !important;
+    margin: 0 auto !important;
+    line-height: 1.6 !important;
+}
+
+/* === BOTONES PREMIUM === */
+.stButton > button {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    color: white !important;
+    border: none !important;
+    padding: 0.8em 1.5em !important;
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    font-size: 1em !important;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
+    transition: all 0.3s ease !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+.stButton > button:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6) !important;
+    background: linear-gradient(135deg, #4f8df8 0%, #2d5fe8 100%) !important;
+}
+
+/* === MÉTRICAS PREMIUM === */
+div[data-testid="metric-container"] {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9)) !important;
+    backdrop-filter: blur(10px) !important;
+    border-radius: 20px !important;
+    padding: 24px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    transition: all 0.3s ease !important;
+}
+
+div[data-testid="metric-container"]:hover {
+    transform: translateY(-5px) !important;
+    box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+div[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-size: 2.5em !important;
+    font-weight: 800 !important;
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+/* === TARJETAS DE CULTIVOS === */
+.cultivo-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
+    border-radius: 20px !important;
+    padding: 25px !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+    transition: all 0.3s ease !important;
+    height: 100% !important;
+}
+
+.cultivo-card:hover {
+    transform: translateY(-8px) !important;
+    box-shadow: 0 20px 40px rgba(59, 130, 246, 0.2) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+/* === BADGES === */
+.stats-badge {
+    display: inline-block !important;
+    padding: 6px 14px !important;
+    border-radius: 50px !important;
+    font-size: 0.85em !important;
+    font-weight: 700 !important;
+    margin: 2px !important;
+}
+
+.badge-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    color: white !important;
+}
+
+.badge-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    color: white !important;
+}
+
+.badge-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    color: white !important;
+}
+
+.badge-info {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    color: white !important;
+}
+
+/* === SCROLLBAR PERSONALIZADA === */
+::-webkit-scrollbar {
+    width: 10px !important;
+    height: 10px !important;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.8) !important;
+    border-radius: 10px !important;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    border-radius: 10px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #4f8df8 0%, #2d5fe8 100%) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ===== HERO BANNER PRINCIPAL =====
+st.markdown("""
+<div class="hero-banner">
+    <div class="hero-content">
+        <h1 class="hero-title">ANALIZADOR MULTI-CULTIVO SATELITAL</h1>
+        <p class="hero-subtitle">Potenciado con NASA POWER, Google Earth Engine y datos SRTM para agricultura de precisión</p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ===== FUNCIÓN PARA MOSTRAR INFORMACIÓN DEL CULTIVO =====
 def mostrar_info_cultivo(cultivo):
@@ -812,7 +660,7 @@ def mostrar_info_cultivo(cultivo):
             <ul>
         """, unsafe_allow_html=True)
         
-        for variedad in params.get('VARIEDADES', [])[:5]:  # Mostrar solo las primeras 5
+        for variedad in params.get('VARIEDADES', [])[:5]:
             st.markdown(f"<li>{variedad}</li>", unsafe_allow_html=True)
         
         if len(params.get('VARIEDADES', [])) > 5:
@@ -824,18 +672,6 @@ def mostrar_info_cultivo(cultivo):
         """, unsafe_allow_html=True)
 
 # ===== FUNCIONES GOOGLE EARTH ENGINE =====
-def verificar_autenticacion_gee():
-    """Verificar si Google Earth Engine está autenticado"""
-    if not GEE_AVAILABLE:
-        return False
-    
-    try:
-        # Intentar inicializar
-        ee.Initialize()
-        return True
-    except:
-        return False
-
 def obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice='NDVI'):
     """Obtener datos reales de Sentinel-2 usando Google Earth Engine"""
     if not GEE_AVAILABLE or not st.session_state.gee_authenticated:
@@ -868,15 +704,12 @@ def obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice='NDVI'):
         
         # Calcular índice según selección
         if indice == 'NDVI':
-            # NDVI = (NIR - Red) / (NIR + Red)
             ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI')
             index_image = ndvi
         elif indice == 'NDWI':
-            # NDWI = (Green - NIR) / (Green + NIR)
             ndwi = image.normalizedDifference(['B3', 'B8']).rename('NDWI')
             index_image = ndwi
         elif indice == 'EVI':
-            # EVI = 2.5 * (NIR - Red) / (NIR + 6 * Red - 7.5 * Blue + 1)
             evi = image.expression(
                 '2.5 * ((NIR - RED) / (NIR + 6 * RED - 7.5 * BLUE + 1))',
                 {
@@ -887,7 +720,6 @@ def obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice='NDVI'):
             ).rename('EVI')
             index_image = evi
         elif indice == 'SAVI':
-            # SAVI = ((NIR - Red) / (NIR + Red + 0.5)) * (1 + 0.5)
             savi = image.expression(
                 '((NIR - RED) / (NIR + RED + 0.5)) * (1.5)',
                 {
@@ -897,7 +729,6 @@ def obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice='NDVI'):
             ).rename('SAVI')
             index_image = savi
         elif indice == 'MSAVI':
-            # MSAVI = (2 * NIR + 1 - sqrt((2 * NIR + 1)² - 8 * (NIR - Red))) / 2
             msavi = image.expression(
                 '(2 * NIR + 1 - sqrt(pow((2 * NIR + 1), 2) - 8 * (NIR - RED))) / 2',
                 {
@@ -907,7 +738,6 @@ def obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice='NDVI'):
             ).rename('MSAVI')
             index_image = msavi
         else:
-            # Por defecto usar NDVI
             ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI')
             index_image = ndvi
             indice = 'NDVI'
@@ -981,24 +811,18 @@ def obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, dataset='LANDSAT/LC0
         
         # Determinar nombre de bandas según el dataset
         if 'LC08' in dataset or 'LANDSAT/LC08' in dataset:
-            # Landsat 8
             red_band = 'SR_B4'
             nir_band = 'SR_B5'
-            swir_band = 'SR_B6'
             blue_band = 'SR_B2'
             green_band = 'SR_B3'
         elif 'LC09' in dataset:
-            # Landsat 9
             red_band = 'SR_B4'
             nir_band = 'SR_B5'
-            swir_band = 'SR_B6'
             blue_band = 'SR_B2'
             green_band = 'SR_B3'
         else:
-            # Por defecto usar Landsat 8/9
             red_band = 'SR_B4'
             nir_band = 'SR_B5'
-            swir_band = 'SR_B6'
             blue_band = 'SR_B2'
             green_band = 'SR_B3'
         
@@ -1017,15 +841,12 @@ def obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, dataset='LANDSAT/LC0
         
         # Calcular índice según selección
         if indice == 'NDVI':
-            # NDVI = (NIR - Red) / (NIR + Red)
             ndvi = image.normalizedDifference([nir_band, red_band]).rename('NDVI')
             index_image = ndvi
         elif indice == 'NDWI':
-            # NDWI = (Green - NIR) / (Green + NIR)
             ndwi = image.normalizedDifference([green_band, nir_band]).rename('NDWI')
             index_image = ndwi
         elif indice == 'EVI':
-            # EVI = 2.5 * (NIR - Red) / (NIR + 6 * Red - 7.5 * Blue + 1)
             evi = image.expression(
                 '2.5 * ((NIR - RED) / (NIR + 6 * RED - 7.5 * BLUE + 1))',
                 {
@@ -1036,7 +857,6 @@ def obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, dataset='LANDSAT/LC0
             ).rename('EVI')
             index_image = evi
         elif indice == 'SAVI':
-            # SAVI = ((NIR - Red) / (NIR + Red + 0.5)) * (1 + 0.5)
             savi = image.expression(
                 '((NIR - RED) / (NIR + RED + 0.5)) * (1.5)',
                 {
@@ -1046,7 +866,6 @@ def obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, dataset='LANDSAT/LC0
             ).rename('SAVI')
             index_image = savi
         elif indice == 'MSAVI':
-            # MSAVI = (2 * NIR + 1 - sqrt((2 * NIR + 1)² - 8 * (NIR - Red))) / 2
             msavi = image.expression(
                 '(2 * NIR + 1 - sqrt(pow((2 * NIR + 1), 2) - 8 * (NIR - RED))) / 2',
                 {
@@ -1056,7 +875,6 @@ def obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, dataset='LANDSAT/LC0
             ).rename('MSAVI')
             index_image = msavi
         else:
-            # Por defecto usar NDVI
             ndvi = image.normalizedDifference([nir_band, red_band]).rename('NDVI')
             index_image = ndvi
             indice = 'NDVI'
@@ -1117,18 +935,6 @@ def obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, dataset='LANDSAT/LC0
         
     except Exception as e:
         st.error(f"❌ Error obteniendo datos de Landsat desde GEE: {str(e)}")
-        return None
-
-def descargar_datos_satelitales_gee(gdf, fecha_inicio, fecha_fin, satelite, indice='NDVI'):
-    """Descargar datos satelitales usando Google Earth Engine"""
-    
-    if satelite == 'SENTINEL-2_GEE':
-        return obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice)
-    elif satelite == 'LANDSAT-8_GEE':
-        return obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, 'LANDSAT/LC08/C02/T1_L2', indice)
-    elif satelite == 'LANDSAT-9_GEE':
-        return obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, 'LANDSAT/LC09/C02/T1_L2', indice)
-    else:
         return None
 
 # ===== FUNCIONES PARA DATOS SIMULADOS (FALLBACK) =====
@@ -1207,16 +1013,23 @@ def generar_datos_simulados(gdf, cultivo, indice='NDVI'):
     }
     return datos_simulados
 
-# ===== INICIALIZACIÓN SEGURA DE VARIABLES =====
-nutriente = None
-satelite_seleccionado = "SENTINEL-2_GEE" if GEE_AVAILABLE else "SENTINEL-2"
-indice_seleccionado = "NDVI"
-fecha_inicio = datetime.now() - timedelta(days=30)
-fecha_fin = datetime.now()
+def descargar_datos_satelitales_gee(gdf, fecha_inicio, fecha_fin, satelite, indice='NDVI'):
+    """Descargar datos satelitales usando Google Earth Engine"""
+    
+    if satelite == 'SENTINEL-2_GEE':
+        return obtener_datos_sentinel2_gee(gdf, fecha_inicio, fecha_fin, indice)
+    elif satelite == 'LANDSAT-8_GEE':
+        return obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, 'LANDSAT/LC08/C02/T1_L2', indice)
+    elif satelite == 'LANDSAT-9_GEE':
+        return obtener_datos_landsat_gee(gdf, fecha_inicio, fecha_fin, 'LANDSAT/LC09/C02/T1_L2', indice)
+    else:
+        return None
 
-# ===== SIDEBAR MEJORADO (INTERFAZ VISUAL) =====
+# ===== SIDEBAR MEJORADO =====
 with st.sidebar:
     st.markdown('<div class="sidebar-title">⚙️ CONFIGURACIÓN</div>', unsafe_allow_html=True)
+    
+    # Selección de cultivo
     cultivo = st.selectbox("Cultivo:", ["TRIGO", "MAIZ", "SORGO", "SOJA", "GIRASOL", "MANI"])
     
     # Mostrar información del cultivo
@@ -1235,111 +1048,107 @@ with st.sidebar:
     
     # Configuración Google Earth Engine
     if GEE_AVAILABLE:
-        with st.expander("🔐 Configuración Google Earth Engine"):
+        with st.expander("🔐 Configuración Google Earth Engine", expanded=True):
             
             # Mostrar estado actual
             if st.session_state.gee_authenticated:
-                st.success("✅ Google Earth Engine autenticado")
-                if st.session_state.gee_project:
-                    st.info(f"Proyecto: {st.session_state.gee_project}")
+                st.success("✅ **AUTENTICADO** - Datos reales disponibles")
                 
+                if st.session_state.gee_project:
+                    st.info(f"**Proyecto:** {st.session_state.gee_project}")
+                
+                # Botón para verificar conexión
+                if st.button("🔍 Verificar conexión GEE", key="test_connection"):
+                    conexion_ok, mensaje = verificar_conexion_gee()
+                    if conexion_ok:
+                        st.success(f"✅ {mensaje}")
+                    else:
+                        st.error(f"❌ {mensaje}")
+                
+                # Botón para cerrar sesión
                 if st.button("🗑️ Cerrar sesión GEE", key="logout_gee"):
                     st.session_state.gee_authenticated = False
+                    st.session_state.gee_initialized = False
                     st.session_state.gee_credentials = ''
                     st.session_state.gee_project = ''
                     st.success("Sesión de GEE cerrada")
                     st.rerun()
+                    
             else:
-                st.info("Para usar Google Earth Engine, necesitas autenticarte.")
+                st.error("❌ **NO AUTENTICADO** - Solo datos simulados")
                 
-                # Opciones de autenticación
-                auth_method = st.radio(
-                    "Método de autenticación:",
-                    ["Autenticación automática", "Usar credenciales existentes"]
+                st.markdown("---")
+                st.markdown("### Instrucciones para autenticar:")
+                
+                # Opción 1: Autenticación automática
+                if st.button("🔑 Intentar autenticación automática", key="auto_auth"):
+                    with st.spinner("Intentando autenticación..."):
+                        inicializado, mensaje = inicializar_gee()
+                        if inicializado:
+                            st.success(f"✅ {mensaje}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {mensaje}")
+                
+                st.markdown("---")
+                
+                # Opción 2: Cuenta de servicio
+                st.markdown("**O usar cuenta de servicio:**")
+                creds_file = st.file_uploader(
+                    "Subir archivo JSON de credenciales",
+                    type=['json'],
+                    key="service_account_upload",
+                    help="Archivo JSON descargado de Google Cloud Console"
                 )
                 
-                if auth_method == "Autenticación automática":
-                    if st.button("🔑 Autenticar con Google Earth Engine", key="auth_gee", type="primary"):
-                        with st.spinner("Autenticando con Google Earth Engine..."):
-                            try:
-                                # Intentar inicializar GEE
-                                ee.Initialize()
-                                st.session_state.gee_authenticated = True
-                                
-                                # Obtener información del proyecto
-                                try:
-                                    project_info = ee.data.getAssetRoots()
-                                    if project_info:
-                                        st.session_state.gee_project = project_info[0]['id']
-                                except:
-                                    st.session_state.gee_project = "Proyecto predeterminado"
-                                
-                                st.success("✅ Autenticación exitosa con Google Earth Engine!")
+                if creds_file is not None:
+                    if st.button("🔐 Autenticar con cuenta de servicio", key="service_auth"):
+                        with st.spinner("Procesando credenciales..."):
+                            autenticado, mensaje = autenticar_con_cuenta_servicio(creds_file)
+                            if autenticado:
+                                st.success(f"✅ {mensaje}")
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error de autenticación: {str(e)}")
-                                st.info("""
-                                **Solución:**
-                                1. Asegúrate de tener una cuenta de Google Earth Engine activada
-                                2. Instala earthengine-api: `pip install earthengine-api`
-                                3. Ejecuta en terminal: `earthengine authenticate`
-                                4. Vuelve a intentar
-                                """)
+                            else:
+                                st.error(f"❌ {mensaje}")
                 
-                else:
-                    st.markdown("""
-                    **Instrucciones para credenciales existentes:**
-                    1. Ejecuta en terminal: `earthengine authenticate`
-                    2. Copia el token de autenticación
-                    3. Pega el token en el campo de abajo
-                    """)
-                    
-                    gee_token = st.text_area("Token de autenticación GEE", height=100)
-                    
-                    if st.button("🔑 Usar Token GEE", key="use_gee_token"):
-                        if gee_token:
-                            with st.spinner("Autenticando con token..."):
-                                try:
-                                    # Guardar token temporalmente
-                                    import tempfile
-                                    import json
-                                    
-                                    token_data = json.loads(gee_token)
-                                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                                        json.dump(token_data, f)
-                                        token_file = f.name
-                                    
-                                    # Configurar credenciales
-                                    credentials = ee.ServiceAccountCredentials(
-                                        '',  # Dejar vacío para autenticación personal
-                                        token_file
-                                    )
-                                    ee.Initialize(credentials)
-                                    
-                                    st.session_state.gee_authenticated = True
-                                    st.success("✅ Autenticación con token exitosa!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error con el token: {str(e)}")
-                        else:
-                            st.warning("⚠️ Por favor, ingresa un token válido")
+                st.markdown("---")
+                st.markdown("""
+                **📚 Guía rápida:**
+                1. Abre una terminal
+                2. Ejecuta: `earthengine authenticate`
+                3. Sigue las instrucciones en el navegador
+                4. Regresa aquí y haz clic en "Intentar autenticación automática"
+                """)
     
     else:
-        st.warning("⚠️ Google Earth Engine no disponible. Instala con: pip install earthengine-api")
+        st.warning("""
+        ⚠️ **Google Earth Engine no disponible**
+        
+        Para instalar:
+        ```bash
+        pip install earthengine-api
+        ```
+        
+        Luego reinicia la aplicación.
+        """)
     
+    st.markdown("---")
     st.subheader("🛰️ Fuente de Datos Satelitales")
     
     # Opciones de satélites disponibles
     opciones_satelites = []
     
-    # Agregar opciones de GEE si está disponible
-    if GEE_AVAILABLE:
+    # Agregar opciones de GEE si está autenticado
+    if GEE_AVAILABLE and st.session_state.gee_authenticated:
         opciones_satelites.extend(["SENTINEL-2_GEE", "LANDSAT-8_GEE", "LANDSAT-9_GEE"])
     
     # Agregar opciones simuladas
     opciones_satelites.extend(["SENTINEL-2", "LANDSAT-8", "DATOS_SIMULADOS"])
     
     # Selector de satélite
+    if not opciones_satelites:
+        opciones_satelites = ["DATOS_SIMULADOS"]
+    
     satelite_seleccionado = st.selectbox(
         "Satélite:",
         opciones_satelites,
@@ -1375,21 +1184,18 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Subir archivo de tu parcela", type=['zip', 'kml', 'kmz'],
                                      help="Formatos aceptados: Shapefile (.zip), KML (.kml), KMZ (.kmz)")
 
-# ===== FUNCIONES AUXILIARES - CORREGIDAS PARA EPSG:4326 =====
+# ===== FUNCIONES AUXILIARES =====
 def validar_y_corregir_crs(gdf):
     if gdf is None or len(gdf) == 0:
         return gdf
     try:
         if gdf.crs is None:
             gdf = gdf.set_crs('EPSG:4326', inplace=False)
-            st.info("ℹ️ Se asignó EPSG:4326 al archivo (no tenía CRS)")
         elif str(gdf.crs).upper() != 'EPSG:4326':
             original_crs = str(gdf.crs)
             gdf = gdf.to_crs('EPSG:4326')
-            st.info(f"ℹ️ Transformado de {original_crs} a EPSG:4326")
         return gdf
     except Exception as e:
-        st.warning(f"⚠️ Error al corregir CRS: {str(e)}")
         return gdf
 
 def calcular_superficie(gdf):
@@ -1399,7 +1205,6 @@ def calcular_superficie(gdf):
         gdf = validar_y_corregir_crs(gdf)
         bounds = gdf.total_bounds
         if bounds[0] < -180 or bounds[2] > 180 or bounds[1] < -90 or bounds[3] > 90:
-            st.warning("⚠️ Coordenadas fuera de rango para cálculo preciso de área")
             area_grados2 = gdf.geometry.area.sum()
             area_m2 = area_grados2 * 111000 * 111000
             return area_m2 / 10000
@@ -1640,7 +1445,7 @@ def generar_dem_sintetico(gdf, resolucion=10.0):
     minx, miny, maxx, maxy = bounds
     
     # Crear grid
-    num_cells_x = int((maxx - minx) * 111000 / resolucion)  # 1 grado ≈ 111km
+    num_cells_x = int((maxx - minx) * 111000 / resolucion)
     num_cells_y = int((maxy - miny) * 111000 / resolucion)
     num_cells_x = max(50, min(num_cells_x, 200))
     num_cells_y = max(50, min(num_cells_y, 200))
@@ -1686,7 +1491,7 @@ def generar_dem_sintetico(gdf, resolucion=10.0):
     noise = rng.randn(*X.shape) * 5
     
     Z = elevacion_base + slope_x * (X - minx) + slope_y * (Y - miny) + relief + noise
-    Z = np.maximum(Z, 50)  # Evitar valores negativos
+    Z = np.maximum(Z, 50)
     
     # Aplicar máscara de la parcela
     points = np.vstack([X.flatten(), Y.flatten()]).T
@@ -1699,11 +1504,9 @@ def generar_dem_sintetico(gdf, resolucion=10.0):
 
 def calcular_pendiente(X, Y, Z, resolucion):
     """Calcula pendiente a partir del DEM"""
-    # Calcular gradientes
     dy = np.gradient(Z, axis=0) / resolucion
     dx = np.gradient(Z, axis=1) / resolucion
     
-    # Calcular pendiente en porcentaje
     pendiente = np.sqrt(dx**2 + dy**2) * 100
     pendiente = np.clip(pendiente, 0, 100)
     
@@ -1744,7 +1547,7 @@ def generar_curvas_nivel(X, Y, Z, intervalo=5.0):
             for i in range(1, num_features + 1):
                 # Extraer contorno
                 contorno = (labeled == i)
-                if np.sum(contorno) > 10:  # Filtrar contornos muy pequeños
+                if np.sum(contorno) > 10:
                     # Obtener coordenadas del contorno
                     y_indices, x_indices = np.where(contorno)
                     if len(x_indices) > 2:
@@ -1757,7 +1560,7 @@ def generar_curvas_nivel(X, Y, Z, intervalo=5.0):
     
     return curvas_nivel, elevaciones
 
-# ===== FUNCIONES DE ANÁLISIS COMPLETOS =====
+# ===== FUNCIONES DE ANÁLISIS =====
 def analizar_fertilidad_actual(gdf_dividido, cultivo, datos_satelitales):
     """Análisis de fertilidad actual"""
     n_poligonos = len(gdf_dividido)
@@ -1851,9 +1654,9 @@ def analizar_costos(gdf_dividido, cultivo, recomendaciones_n, recomendaciones_p,
     costos = []
     params = PARAMETROS_CULTIVOS[cultivo]
     
-    precio_n = 1.2  # USD/kg N
-    precio_p = 2.5  # USD/kg P2O5
-    precio_k = 1.8  # USD/kg K2O
+    precio_n = 1.2
+    precio_p = 2.5
+    precio_k = 1.8
     
     for i in range(len(gdf_dividido)):
         costo_n = recomendaciones_n[i] * precio_n
@@ -1879,10 +1682,8 @@ def analizar_proyecciones_cosecha(gdf_dividido, cultivo, indices):
         npk_actual = idx['npk_actual']
         ndvi = idx['ndvi']
         
-        # Rendimiento base sin fertilización
         rendimiento_base = params['RENDIMIENTO_OPTIMO'] * npk_actual * 0.7
         
-        # Incremento esperado con fertilización
         incremento = (1 - npk_actual) * 0.4 + (1 - ndvi) * 0.2
         rendimiento_con_fert = rendimiento_base * (1 + incremento)
         
@@ -2013,13 +1814,16 @@ def ejecutar_analisis_completo(gdf, cultivo, n_divisiones, satelite, fecha_inici
         area_total = calcular_superficie(gdf)
         resultados['area_total'] = area_total
         
-        # Obtener datos satelitales - MODIFICADO PARA INCLUIR GEE
+        # Obtener datos satelitales
         datos_satelitales = None
         if satelite in ['SENTINEL-2_GEE', 'LANDSAT-8_GEE', 'LANDSAT-9_GEE']:
-            # Usar Google Earth Engine
-            datos_satelitales = descargar_datos_satelitales_gee(gdf, fecha_inicio, fecha_fin, satelite, indice_seleccionado)
-            if datos_satelitales is None:
-                st.warning("⚠️ No se pudieron obtener datos de GEE. Usando datos simulados.")
+            if st.session_state.gee_authenticated:
+                datos_satelitales = descargar_datos_satelitales_gee(gdf, fecha_inicio, fecha_fin, satelite, indice_seleccionado)
+                if datos_satelitales is None:
+                    st.warning("⚠️ No se pudieron obtener datos de GEE. Usando datos simulados.")
+                    datos_satelitales = generar_datos_simulados(gdf, cultivo, indice_seleccionado)
+            else:
+                st.warning("⚠️ GEE no autenticado. Usando datos simulados.")
                 datos_satelitales = generar_datos_simulados(gdf, cultivo, indice_seleccionado)
         elif satelite == "SENTINEL-2":
             datos_satelitales = descargar_datos_sentinel2_simulado(gdf, fecha_inicio, fecha_fin, indice_seleccionado)
@@ -2129,7 +1933,7 @@ def ejecutar_analisis_completo(gdf, cultivo, n_divisiones, satelite, fecha_inici
         traceback.print_exc()
         return resultados
 
-# ===== FUNCIONES DE VISUALIZACIÓN CON BOTONES DESCARGA =====
+# ===== FUNCIONES DE VISUALIZACIÓN =====
 def crear_mapa_fertilidad(gdf_completo, cultivo, satelite):
     """Crear mapa de fertilidad actual"""
     try:
@@ -2297,101 +2101,6 @@ def crear_mapa_texturas(gdf_completo, cultivo):
         st.error(f"❌ Error creando mapa de texturas: {str(e)}")
         return None
 
-def crear_grafico_distribucion_costos(costos_n, costos_p, costos_k, otros, costo_total):
-    """Crear gráfico de distribución de costos"""
-    try:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        categorias = ['Nitrógeno', 'Fósforo', 'Potasio', 'Otros']
-        valores = [costos_n, costos_p, costos_k, otros]
-        colores = ['#00ff00', '#0000ff', '#4B0082', '#cccccc']
-        
-        bars = ax.bar(categorias, valores, color=colores, edgecolor='black')
-        ax.set_title('Distribución de Costos de Fertilización', fontsize=14, fontweight='bold')
-        ax.set_ylabel('USD', fontsize=12)
-        ax.set_xlabel('Componente', fontsize=12)
-        
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 10,
-                   f'${height:.0f}', ha='center', va='bottom', fontweight='bold')
-        
-        plt.tight_layout()
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        buf.seek(0)
-        plt.close()
-        return buf
-    except Exception as e:
-        st.error(f"❌ Error creando gráfico de costos: {str(e)}")
-        return None
-
-def crear_grafico_composicion_textura(arena_prom, limo_prom, arcilla_prom, textura_dist):
-    """Crear gráfico de composición granulométrica"""
-    try:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-        
-        composicion = [arena_prom, limo_prom, arcilla_prom]
-        labels = ['Arena', 'Limo', 'Arcilla']
-        colors_pie = ['#d8b365', '#f6e8c3', '#01665e']
-        ax1.pie(composicion, labels=labels, colors=colors_pie, autopct='%1.1f%%', startangle=90)
-        ax1.set_title('Composición Promedio del Suelo')
-        
-        ax2.bar(textura_dist.index, textura_dist.values, 
-               color=[PALETAS_GEE['TEXTURA'][i % len(PALETAS_GEE['TEXTURA'])] for i in range(len(textura_dist))])
-        ax2.set_title('Distribución de Texturas')
-        ax2.set_xlabel('Textura')
-        ax2.set_ylabel('Número de Zonas')
-        ax2.tick_params(axis='x', rotation=45)
-        
-        plt.tight_layout()
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        buf.seek(0)
-        plt.close()
-        return buf
-    except Exception as e:
-        st.error(f"❌ Error creando gráfico de textura: {str(e)}")
-        return None
-
-def crear_grafico_proyecciones_rendimiento(zonas, sin_fert, con_fert):
-    """Crear gráfico de proyecciones de rendimiento"""
-    try:
-        fig, ax = plt.subplots(figsize=(12, 6))
-        
-        x = np.arange(len(zonas))
-        width = 0.35
-        
-        bars1 = ax.bar(x - width/2, sin_fert, width, label='Sin Fertilización', color='#ff9999')
-        bars2 = ax.bar(x + width/2, con_fert, width, label='Con Fertilización', color='#66b3ff')
-        
-        ax.set_xlabel('Zona')
-        ax.set_ylabel('Rendimiento (kg)')
-        ax.set_title('Proyecciones de Rendimiento por Zona')
-        ax.set_xticks(x)
-        ax.set_xticklabels(zonas)
-        ax.legend()
-        
-        def autolabel(bars):
-            for bar in bars:
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 50,
-                       f'{height:.0f}', ha='center', va='bottom', fontsize=8)
-        
-        autolabel(bars1)
-        autolabel(bars2)
-        
-        plt.tight_layout()
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-        buf.seek(0)
-        plt.close()
-        return buf
-    except Exception as e:
-        st.error(f"❌ Error creando gráfico de proyecciones: {str(e)}")
-        return None
-
-# ===== FUNCIONES PARA CURVAS DE NIVEL Y 3D =====
 def crear_mapa_pendientes(X, Y, pendientes, gdf_original):
     """Crear mapa de pendientes"""
     try:
@@ -2472,7 +2181,6 @@ def crear_mapa_curvas_nivel(X, Y, Z, curvas_nivel, elevaciones, gdf_original):
                 if hasattr(curva, 'coords'):
                     coords = np.array(curva.coords)
                     ax.plot(coords[:, 0], coords[:, 1], 'b-', linewidth=0.8, alpha=0.7)
-                    # Etiqueta de elevación
                     if len(coords) > 0:
                         mid_idx = len(coords) // 2
                         ax.text(coords[mid_idx, 0], coords[mid_idx, 1], 
@@ -2509,16 +2217,13 @@ def crear_visualizacion_3d(X, Y, Z):
         surf = ax.plot_surface(X, Y, Z, cmap='terrain', alpha=0.8, 
                               linewidth=0.5, antialiased=True)
         
-        # Configuración de ejes
         ax.set_xlabel('Longitud', fontsize=10)
         ax.set_ylabel('Latitud', fontsize=10)
         ax.set_zlabel('Elevación (m)', fontsize=10)
         ax.set_title('Modelo 3D del Terreno', fontsize=14, fontweight='bold', pad=20)
         
-        # Colorbar
         fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5, label='Elevación (m)')
         
-        # Estilo
         ax.grid(True, alpha=0.3)
         ax.view_init(elev=30, azim=45)
         
@@ -2532,79 +2237,15 @@ def crear_visualizacion_3d(X, Y, Z):
         st.error(f"❌ Error creando visualización 3D: {str(e)}")
         return None
 
-# ===== FUNCIÓN PARA VISUALIZAR IMÁGENES GEE =====
-def visualizar_imagen_gee(gdf, satelite, fecha_inicio, fecha_fin):
-    """Generar y mostrar una imagen de GEE"""
-    if not GEE_AVAILABLE or not st.session_state.gee_authenticated:
-        return None
-    
-    try:
-        # Obtener bounding box
-        bounds = gdf.total_bounds
-        min_lon, min_lat, max_lon, max_lat = bounds
-        
-        # Crear geometría
-        geometry = ee.Geometry.Rectangle([min_lon, min_lat, max_lon, max_lat])
-        
-        # Formatear fechas
-        start_date = fecha_inicio.strftime('%Y-%m-%d')
-        end_date = fecha_fin.strftime('%Y-%m-%d')
-        
-        # Seleccionar colección según satélite
-        if satelite == 'SENTINEL-2_GEE':
-            collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-            vis_params = {
-                'min': 0,
-                'max': 3000,
-                'bands': ['B4', 'B3', 'B2']
-            }
-        elif satelite == 'LANDSAT-8_GEE':
-            collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
-            vis_params = {
-                'min': 0,
-                'max': 3000,
-                'bands': ['SR_B4', 'SR_B3', 'SR_B2']
-            }
-        elif satelite == 'LANDSAT-9_GEE':
-            collection = ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
-            vis_params = {
-                'min': 0,
-                'max': 3000,
-                'bands': ['SR_B4', 'SR_B3', 'SR_B2']
-            }
-        else:
-            return None
-        
-        # Filtrar colección
-        image = (collection
-                .filterBounds(geometry)
-                .filterDate(start_date, end_date)
-                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
-                .sort('CLOUDY_PIXEL_PERCENTAGE')
-                .first())
-        
-        if image is None:
-            return None
-        
-        # Generar URL para visualización
-        map_id_dict = image.getMapId(vis_params)
-        
-        # Crear HTML para mostrar el mapa
-        html = f"""
-        <iframe
-            width="100%"
-            height="500"
-            src="https://earthengine.googleapis.com/map/{map_id_dict['mapid']}/{{z}}/{{x}}/{{y}}?token={map_id_dict['token']}"
-            frameborder="0"
-            allowfullscreen
-        ></iframe>
-        """
-        
-        return html
-        
-    except Exception as e:
-        st.error(f"❌ Error generando visualización GEE: {str(e)}")
-        return None
+def crear_boton_descarga_png(buffer, nombre_archivo, texto_boton="📥 Descargar PNG"):
+    """Crear botón de descarga para archivos PNG"""
+    if buffer:
+        st.download_button(
+            label=texto_boton,
+            data=buffer,
+            file_name=nombre_archivo,
+            mime="image/png"
+        )
 
 # ===== FUNCIONES DE EXPORTACIÓN =====
 def exportar_a_geojson(gdf, nombre_base="parcela"):
@@ -2635,7 +2276,7 @@ def generar_reporte_completo(resultados, cultivo, satelite, fecha_inicio, fecha_
         
         # 1. INFORMACIÓN GENERAL
         doc.add_heading('1. INFORMACIÓN GENERAL', level=1)
-        info_table = doc.add_table(rows=6, cols=2)  # Aumentado a 6 filas
+        info_table = doc.add_table(rows=6, cols=2)
         info_table.style = 'Table Grid'
         info_table.cell(0, 0).text = 'Cultivo'
         info_table.cell(0, 1).text = cultivo
@@ -2649,18 +2290,6 @@ def generar_reporte_completo(resultados, cultivo, satelite, fecha_inicio, fecha_
         info_table.cell(4, 1).text = f'{fecha_inicio.strftime("%d/%m/%Y")} a {fecha_fin.strftime("%d/%m/%Y")}'
         info_table.cell(5, 0).text = 'Fuente de Datos'
         info_table.cell(5, 1).text = resultados['datos_satelitales']['fuente'] if resultados['datos_satelitales'] else 'N/A'
-        
-        # Información de datos satelitales
-        if 'datos_satelitales' in resultados and resultados['datos_satelitales']:
-            datos_sat = resultados['datos_satelitales']
-            doc.add_paragraph()
-            doc.add_heading('1.1. DATOS SATELITALES', level=2)
-            doc.add_paragraph(f'Fuente: {datos_sat.get("fuente", "N/D")}')
-            doc.add_paragraph(f'Índice: {datos_sat.get("indice", "N/D")}')
-            doc.add_paragraph(f'Valor promedio: {datos_sat.get("valor_promedio", 0):.3f}')
-            doc.add_paragraph(f'Estado: {datos_sat.get("estado", "N/D")}')
-            if datos_sat.get("nota"):
-                doc.add_paragraph(f'Nota: {datos_sat.get("nota")}')
         
         doc.add_paragraph()
         
@@ -2828,7 +2457,7 @@ def generar_reporte_completo(resultados, cultivo, satelite, fecha_inicio, fecha_
         doc.add_heading('9. METADATOS TÉCNICOS', level=1)
         metadatos = [
             ('Generado por', 'Analizador Multi-Cultivo Satellital'),
-            ('Versión', '5.0 - Cultivos Extensivos con Google Earth Engine'),
+            ('Versión', '2.0 - Google Earth Engine Integrado'),
             ('Fecha de generación', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             ('Sistema de coordenadas', 'EPSG:4326 (WGS84)'),
             ('Número de zonas', str(len(resultados['gdf_completo']))),
@@ -2856,20 +2485,7 @@ def generar_reporte_completo(resultados, cultivo, satelite, fecha_inicio, fecha_
         traceback.print_exc()
         return None
 
-# ===== FUNCIÓN PARA DESCARGAR PNG =====
-def crear_boton_descarga_png(buffer, nombre_archivo, texto_boton="📥 Descargar PNG"):
-    """Crear botón de descarga para archivos PNG"""
-    if buffer:
-        st.download_button(
-            label=texto_boton,
-            data=buffer,
-            file_name=nombre_archivo,
-            mime="image/png"
-        )
-
 # ===== INTERFAZ PRINCIPAL =====
-st.title("ANALIZADOR MULTI-CULTIVO SATELITAL")
-
 if uploaded_file:
     with st.spinner("Cargando parcela..."):
         try:
@@ -2917,13 +2533,15 @@ if uploaded_file:
                     # Mostrar estado de GEE si es relevante
                     if satelite_seleccionado in ['SENTINEL-2_GEE', 'LANDSAT-8_GEE', 'LANDSAT-9_GEE']:
                         if st.session_state.gee_authenticated:
-                            st.success("✅ GEE autenticado")
+                            st.success("✅ GEE autenticado - Datos reales")
                         else:
-                            st.error("❌ GEE no autenticado")
+                            st.error("❌ GEE no autenticado - Datos simulados")
+                
+                st.markdown("---")
                 
                 if st.button("🚀 EJECUTAR ANÁLISIS COMPLETO", type="primary", use_container_width=True):
                     with st.spinner("Ejecutando análisis completo..."):
-                        # Ejecutar análisis sin parámetros de Sentinel Hub
+                        # Ejecutar análisis
                         resultados = ejecutar_analisis_completo(
                             gdf, cultivo, n_divisiones, 
                             satelite_seleccionado, fecha_inicio, fecha_fin,
@@ -2951,14 +2569,13 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
     resultados = st.session_state.resultados_todos
     
     # Mostrar resultados en pestañas
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📊 Fertilidad Actual",
         "🧪 Recomendaciones NPK",
         "💰 Análisis de Costos",
         "🏗️ Textura del Suelo",
         "📈 Proyecciones",
-        "🏔️ Curvas de Nivel y 3D",
-        "🌍 Visualización Satelital"
+        "🏔️ Curvas de Nivel"
     ])
     
     with tab1:
@@ -3066,22 +2683,6 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
             inversion_ha = costo_total / resultados['area_total'] if resultados['area_total'] > 0 else 0
             st.metric("Inversión por ha", f"${inversion_ha:.2f} USD/ha")
         
-        # Gráfico de costos
-        st.subheader("📊 DISTRIBUCIÓN DE COSTOS")
-        costos_n = resultados['gdf_completo']['costo_costo_nitrogeno'].sum()
-        costos_p = resultados['gdf_completo']['costo_costo_fosforo'].sum()
-        costos_k = resultados['gdf_completo']['costo_costo_potasio'].sum()
-        otros = costo_total - (costos_n + costos_p + costos_k)
-        
-        grafico_costos = crear_grafico_distribucion_costos(costos_n, costos_p, costos_k, otros, costo_total)
-        if grafico_costos:
-            st.image(grafico_costos, use_container_width=True)
-            crear_boton_descarga_png(
-                grafico_costos,
-                f"grafico_costos_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-                "📥 Descargar Gráfico de Costos PNG"
-            )
-        
         # Tabla de costos
         st.subheader("📋 TABLA DE COSTOS POR ZONA")
         columnas_costos = ['id_zona', 'area_ha', 'costo_costo_nitrogeno', 
@@ -3119,18 +2720,6 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
                 "📥 Descargar Mapa de Texturas PNG"
             )
         
-        # Gráfico de composición
-        st.subheader("📊 COMPOSICIÓN GRANULOMÉTRICA")
-        textura_dist = resultados['gdf_completo']['textura_suelo'].value_counts()
-        grafico_textura = crear_grafico_composicion_textura(arena_prom, limo_prom, arcilla_prom, textura_dist)
-        if grafico_textura:
-            st.image(grafico_textura, use_container_width=True)
-            crear_boton_descarga_png(
-                grafico_textura,
-                f"grafico_textura_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-                "📥 Descargar Gráfico de Textura PNG"
-            )
-        
         # Tabla de texturas
         st.subheader("📋 TABLA DE TEXTURAS POR ZONA")
         columnas_text = ['id_zona', 'area_ha', 'textura_suelo', 'arena', 'limo', 'arcilla']
@@ -3151,21 +2740,6 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
             st.metric("Rendimiento con Fertilización", f"{rend_con:.0f} kg")
         with col3:
             st.metric("Incremento Esperado", f"{incremento:.1f}%")
-        
-        # Gráfico de proyecciones
-        st.subheader("📊 COMPARATIVA DE RENDIMIENTOS")
-        zonas = resultados['gdf_completo']['id_zona'].head(10).astype(str)
-        sin_fert = resultados['gdf_completo']['proy_rendimiento_sin_fert'].head(10)
-        con_fert = resultados['gdf_completo']['proy_rendimiento_con_fert'].head(10)
-        
-        grafico_proyecciones = crear_grafico_proyecciones_rendimiento(zonas, sin_fert, con_fert)
-        if grafico_proyecciones:
-            st.image(grafico_proyecciones, use_container_width=True)
-            crear_boton_descarga_png(
-                grafico_proyecciones,
-                f"grafico_proyecciones_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-                "📥 Descargar Gráfico de Proyecciones PNG"
-            )
         
         # Análisis económico
         st.subheader("💰 ANÁLISIS ECONÓMICO")
@@ -3249,104 +2823,8 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
                     f"visualizacion_3d_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
                     "📥 Descargar Visualización 3D PNG"
                 )
-            
-            # Análisis de riesgo de erosión
-            st.subheader("⚠️ ANÁLISIS DE RIESGO DE EROSION")
-            if stats_pendientes:
-                riesgo_total = 0
-                for categoria, params in CLASIFICACION_PENDIENTES.items():
-                    mask = (dem_data['pendientes'].flatten() >= params['min']) & (dem_data['pendientes'].flatten() < params['max'])
-                    porcentaje = np.sum(mask) / len(dem_data['pendientes'].flatten()) * 100
-                    riesgo_total += porcentaje * params['factor_erosivo']
-                
-                riesgo_promedio = riesgo_total / 100
-                
-                col_r1, col_r2, col_r3 = st.columns(3)
-                with col_r1:
-                    if riesgo_promedio < 0.3:
-                        st.success("✅ **RIESGO BAJO**")
-                        st.metric("Factor Riesgo", f"{riesgo_promedio:.2f}")
-                    elif riesgo_promedio < 0.6:
-                        st.warning("⚠️ **RIESGO MODERADO**")
-                        st.metric("Factor Riesgo", f"{riesgo_promedio:.2f}")
-                    else:
-                        st.error("🚨 **RIESGO ALTO**")
-                        st.metric("Factor Riesgo", f"{riesgo_promedio:.2f}")
-                
-                with col_r2:
-                    area_critica = resultados['area_total'] * (np.sum(dem_data['pendientes'].flatten() > 10) / len(dem_data['pendientes'].flatten()))
-                    st.metric("Área Crítica (>10%)", f"{area_critica:.2f} ha")
-                
-                with col_r3:
-                    area_manejable = resultados['area_total'] * (np.sum(dem_data['pendientes'].flatten() <= 10) / len(dem_data['pendientes'].flatten()))
-                    st.metric("Área Manejable (≤10%)", f"{area_manejable:.2f} ha")
-            
-            # Tabla de datos DEM
-            st.subheader("📊 DATOS TOPOGRÁFICOS")
-            sample_points = []
-            step = max(1, dem_data['X'].shape[0] // 20)
-            for i in range(0, dem_data['X'].shape[0], step):
-                for j in range(0, dem_data['X'].shape[1], step):
-                    if not np.isnan(dem_data['Z'][i, j]):
-                        sample_points.append({
-                            'Latitud': dem_data['Y'][i, j],
-                            'Longitud': dem_data['X'][i, j],
-                            'Elevación (m)': dem_data['Z'][i, j],
-                            'Pendiente (%)': dem_data['pendientes'][i, j]
-                        })
-            
-            if sample_points:
-                df_dem = pd.DataFrame(sample_points).head(20)
-                st.dataframe(df_dem)
         else:
             st.warning("⚠️ No se generaron datos DEM. Intenta ejecutar el análisis nuevamente.")
-    
-    with tab7:
-        st.subheader("VISUALIZACIÓN SATELITAL")
-        
-        if satelite_seleccionado in ['SENTINEL-2_GEE', 'LANDSAT-8_GEE', 'LANDSAT-9_GEE']:
-            if st.session_state.gee_authenticated:
-                with st.spinner("Generando visualización satelital..."):
-                    html_map = visualizar_imagen_gee(
-                        gdf, 
-                        satelite_seleccionado, 
-                        fecha_inicio, 
-                        fecha_fin
-                    )
-                    
-                    if html_map:
-                        st.markdown("### 🛰️ Imagen Satelital (RGB)")
-                        st.components.v1.html(html_map, height=500)
-                        
-                        # Mostrar información de la imagen
-                        if resultados['datos_satelitales']:
-                            datos = resultados['datos_satelitales']
-                            st.markdown("### 📊 Información de la Imagen")
-                            col_info1, col_info2 = st.columns(2)
-                            with col_info1:
-                                st.write(f"**Satélite:** {datos['fuente']}")
-                                st.write(f"**Índice calculado:** {datos['indice']}")
-                                st.write(f"**Valor promedio:** {datos['valor_promedio']:.3f}")
-                            with col_info2:
-                                st.write(f"**Resolución:** {datos['resolucion']}")
-                                st.write(f"**Fecha descarga:** {datos['fecha_descarga']}")
-                                if 'cobertura_nubes' in datos:
-                                    st.write(f"**Cobertura de nubes:** {datos['cobertura_nubes']}%")
-                    else:
-                        st.warning("⚠️ No se pudo generar la visualización satelital")
-            else:
-                st.error("❌ No estás autenticado con Google Earth Engine")
-        else:
-            st.info("ℹ️ Esta función solo está disponible para fuentes satelitales de Google Earth Engine")
-            
-            # Mostrar datos simulados si están disponibles
-            if resultados['datos_satelitales']:
-                datos = resultados['datos_satelitales']
-                st.markdown("### 📊 Datos Satelitales Simulados")
-                st.write(f"**Fuente:** {datos['fuente']}")
-                st.write(f"**Índice:** {datos['indice']}")
-                st.write(f"**Valor promedio:** {datos['valor_promedio']:.3f}")
-                st.write(f"**Rango:** {datos.get('valor_min', 0):.3f} - {datos.get('valor_max', 0):.3f}")
     
     # Sección de exportación
     st.markdown("---")
@@ -3424,26 +2902,25 @@ st.markdown("---")
 col_footer1, col_footer2, col_footer3 = st.columns(3)
 with col_footer1:
     st.markdown("""
-**📡 Fuentes de Datos:**
-- NASA POWER API
-- Google Earth Engine
-- Datos simulados
-""")
+    **📡 Fuentes de Datos:**
+    - Google Earth Engine
+    - NASA POWER API
+    - Datos simulados
+    """)
 with col_footer2:
     st.markdown("""
-**🛠️ Tecnologías:**
-- Streamlit
-- GeoPandas
-- Google Earth Engine API
-- Matplotlib
-- Python-DOCX
-""")
+    **🛠️ Tecnologías:**
+    - Streamlit
+    - GeoPandas
+    - Google Earth Engine API
+    - Matplotlib
+    """)
 with col_footer3:
     st.markdown("""
-**📞 Soporte:**
-- Versión: 5.0 - Cultivos Extensivos con GEE
-- Última actualización: Enero 2026
-""")
+    **📞 Soporte:**
+    - Versión: 2.0 - GEE Integrado
+    - Última actualización: Enero 2026
+    """)
 
 st.markdown(
     '<div style="text-align: center; color: #94a3b8; font-size: 0.9em; margin-top: 2em;">'
