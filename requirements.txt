@@ -20,4 +20,3 @@ requests-oauthlib>=1.3.0
 earthengine-api 
 geemap
 geojson
-contextily as ctx
