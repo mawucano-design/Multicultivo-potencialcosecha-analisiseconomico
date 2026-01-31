@@ -27,6 +27,49 @@ import geojson
 import requests
 import contextily as ctx
 
+# ===== INICIALIZACIÓN AUTOMÁTICA DE GOOGLE EARTH ENGINE =====
+import streamlit as st
+import os
+import json
+
+if 'gee_authenticated' not in st.session_state:
+    st.session_state.gee_authenticated = False
+    st.session_state.gee_project = ''
+
+try:
+    import ee
+    
+    # Intentar con Service Account (Streamlit Cloud / producción)
+    gee_secret = os.environ.get('GEE_SERVICE_ACCOUNT')
+    if gee_secret:
+        try:
+            # Limpiar espacios al inicio/fin y parsear JSON
+            credentials_info = json.loads(gee_secret.strip())
+            credentials = ee.ServiceAccountCredentials(
+                credentials_info['client_email'],
+                key_data=json.dumps(credentials_info)
+            )
+            ee.Initialize(credentials, project='ee-mawucano25')
+            st.session_state.gee_authenticated = True
+            st.session_state.gee_project = 'ee-mawucano25'
+            print("✅ GEE inicializado con Service Account")
+        except Exception as e:
+            print(f"⚠️ Error Service Account: {str(e)}")
+    
+    # Fallback: autenticación local (desarrollo en tu Linux)
+    if not st.session_state.gee_authenticated:
+        try:
+            ee.Initialize(project='ee-mawucano25')
+            st.session_state.gee_authenticated = True
+            st.session_state.gee_project = 'ee-mawucano25'
+            print("✅ GEE inicializado localmente")
+        except Exception as e:
+            print(f"⚠️ Error inicialización local: {str(e)}")
+            
+except Exception as e:
+    print(f"❌ Error crítico GEE: {str(e)}")
+    st.session_state.gee_authenticated = False
+
 # ===== IMPORTACIONES GOOGLE EARTH ENGINE =====
 try:
     import ee
