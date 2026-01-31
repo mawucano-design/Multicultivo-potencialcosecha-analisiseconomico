@@ -16,6 +16,4 @@ geojson>=3.0.0
 requests>=2.31.0
 contextily>=1.5.0
 scipy>=1.11.0
-pip install 
 owslib 
-
