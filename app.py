@@ -36,7 +36,6 @@ from google.oauth2 import service_account
 def initialize_earth_engine():
     """Inicializa Google Earth Engine con cuenta de servicio"""
     try:
-        # Intenta inicializar directamente
         # Configurar credenciales desde secrets de Streamlit
         credentials_dict = {
             "type": "service_account",
@@ -55,15 +54,34 @@ def initialize_earth_engine():
         st.success("✅ Google Earth Engine inicializado correctamente")
         return True
         
-    except Exception as e:
-        # Si ya está inicializado, simplemente retornar True
+    except ee.EEException as e:
         if "already initialized" in str(e).lower():
             st.success("✅ Google Earth Engine ya estaba inicializado")
             return True
         else:
-            st.warning(f"⚠️ No se pudo inicializar Google Earth Engine: {str(e)}")
-            st.info("ℹ️ Usando datos simulados como alternativa")
+            st.warning(f"⚠️ Error de Earth Engine: {str(e)}")
             return False
+    except KeyError as e:
+        st.warning(f"⚠️ No se encontraron credenciales en secrets: {str(e)}")
+        return False
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo inicializar Google Earth Engine: {str(e)}")
+        st.info("ℹ️ Usando datos simulados como alternativa")
+        return False
+
+# === INICIALIZACIÓN CON VALOR POR DEFECTO ===
+gee_initialized = False  # Valor por defecto
+try:
+    gee_initialized = initialize_earth_engine()
+except Exception as e:
+    st.warning(f"⚠️ Error durante la inicialización de GEE: {str(e)}")
+    gee_initialized = False
+
+# Continuar con el resto del código...
+warnings.filterwarnings('ignore')
+
+# === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
+# (el resto del código permanece igual)
 
 # === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
 if 'reporte_completo' not in st.session_state:
