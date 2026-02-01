@@ -36,7 +36,14 @@ from google.oauth2 import service_account
 def initialize_earth_engine():
     """Inicializa Google Earth Engine con cuenta de servicio"""
     try:
-        if not ee.data._credentials:
+        # Verificar si ya está inicializado
+        try:
+            # Intentar acceder a una colección para ver si está inicializado
+            ee.ImageCollection('COPERNICUS/S2_SR').limit(1).getInfo()
+            st.success("✅ Google Earth Engine ya estaba inicializado")
+            return True
+        except Exception:
+            # Si no está inicializado, proceder con la inicialización
             # Configurar credenciales desde secrets de Streamlit
             credentials_dict = {
                 "type": "service_account",
@@ -54,16 +61,11 @@ def initialize_earth_engine():
             ee.Initialize(credentials)
             st.success("✅ Google Earth Engine inicializado correctamente")
             return True
+            
     except Exception as e:
         st.warning(f"⚠️ No se pudo inicializar Google Earth Engine: {str(e)}")
         st.info("ℹ️ Usando datos simulados como alternativa")
         return False
-
-# Intentar inicializar GEE al inicio
-gee_initialized = initialize_earth_engine()
-
-warnings.filterwarnings('ignore')
-
 # === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
 if 'reporte_completo' not in st.session_state:
     st.session_state.reporte_completo = None
