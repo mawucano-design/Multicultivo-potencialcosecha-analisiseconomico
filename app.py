@@ -32,56 +32,76 @@ import contextily as ctx
 import ee
 from google.oauth2 import service_account
 
-# === INICIALIZACIÓN DE GEE ===
+# === INICIALIZACIÓN DE GEE - VERSIÓN CORREGIDA ===
 def initialize_earth_engine():
-    """Inicializa Google Earth Engine con cuenta de servicio"""
+    """Inicializa Google Earth Engine de forma segura"""
     try:
-        # Configurar credenciales desde secrets de Streamlit
-        credentials_dict = {
-            "type": "service_account",
-            "client_email": st.secrets["earth_engine"]["client_email"],
-            "private_key": st.secrets["earth_engine"]["private_key"].replace("\\n", "\n"),
-            "token_uri": "https://oauth2.googleapis.com/token"
-        }
-        
-        credentials = service_account.Credentials.from_service_account_info(
-            credentials_dict,
-            scopes=['https://www.googleapis.com/auth/earthengine']
-        )
-        
-        # Inicializar Earth Engine
-        ee.Initialize(credentials)
-        st.success("✅ Google Earth Engine inicializado correctamente")
-        return True
-        
-    except ee.EEException as e:
-        if "already initialized" in str(e).lower():
-            st.success("✅ Google Earth Engine ya estaba inicializado")
+        # Método 1: Intentar autenticación automática
+        try:
+            ee.Initialize()
+            st.success("✅ Google Earth Engine inicializado correctamente")
             return True
-        else:
-            st.warning(f"⚠️ Error de Earth Engine: {str(e)}")
-            return False
-    except KeyError as e:
-        st.warning(f"⚠️ No se encontraron credenciales en secrets: {str(e)}")
+        except Exception as e:
+            if "already initialized" in str(e).lower():
+                return True
+            # Si falla, probar con credenciales de servicio
+            pass
+        
+        # Método 2: Intentar con credenciales de servicio (si existen)
+        try:
+            # IMPORTANTE: NO acceder a st.secrets directamente aquí
+            # Verificar si las credenciales existen
+            if hasattr(st, 'secrets'):
+                # Usar get para evitar KeyError
+                earth_engine_secrets = st.secrets.get("earth_engine", {})
+                if earth_engine_secrets:
+                    credentials_dict = {
+                        "type": "service_account",
+                        "client_email": earth_engine_secrets.get("client_email", ""),
+                        "private_key": earth_engine_secrets.get("private_key", "").replace("\\n", "\n"),
+                        "token_uri": "https://oauth2.googleapis.com/token"
+                    }
+                    
+                    credentials = service_account.Credentials.from_service_account_info(
+                        credentials_dict,
+                        scopes=['https://www.googleapis.com/auth/earthengine']
+                    )
+                    
+                    ee.Initialize(credentials)
+                    st.success("✅ Google Earth Engine inicializado con credenciales de servicio")
+                    return True
+        except Exception:
+            pass  # Ignorar errores de credenciales
+        
+        # Si llegamos aquí, no se pudo inicializar
         return False
+        
     except Exception as e:
-        st.warning(f"⚠️ No se pudo inicializar Google Earth Engine: {str(e)}")
-        st.info("ℹ️ Usando datos simulados como alternativa")
+        # Capturar cualquier otro error
+        error_msg = str(e).lower()
+        if "credentials" in error_msg or "authenticate" in error_msg:
+            return False
         return False
 
-# === INICIALIZACIÓN CON VALOR POR DEFECTO ===
-gee_initialized = False  # Valor por defecto
-try:
-    gee_initialized = initialize_earth_engine()
-except Exception as e:
-    st.warning(f"⚠️ Error durante la inicialización de GEE: {str(e)}")
-    gee_initialized = False
+# === INICIALIZACIÓN DEFERIDA ===
+# No inicializar GEE al inicio del script
+# En su lugar, inicializarlo cuando sea necesario
+gee_initialized = False
 
-# Continuar con el resto del código...
-warnings.filterwarnings('ignore')
-
-# === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
-# (el resto del código permanece igual)
+# === MODIFICAR TODAS LAS FUNCIONES QUE USAN GEE ===
+# Cambiar get_sentinel2_ndvi para inicializar GEE solo cuando sea necesario
+def get_sentinel2_ndvi(gdf, fecha_inicio, fecha_fin):
+    """Obtiene NDVI de Sentinel-2 desde Google Earth Engine"""
+    try:
+        # Inicializar GEE solo cuando se llame esta función
+        global gee_initialized
+        if not gee_initialized:
+            gee_initialized = initialize_earth_engine()
+            
+        if not gee_initialized:
+            return None
+            
+        # Resto del código...
 
 # === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
 if 'reporte_completo' not in st.session_state:
