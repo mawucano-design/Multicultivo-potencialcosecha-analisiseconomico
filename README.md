@@ -52,7 +52,7 @@ Aplicación web para agricultura de precisión con Google Earth Engine - **SIN I
 
 ```toml
 # En Streamlit Cloud > Settings > Secrets
-EE_ACCOUNT = "tu-cuenta@proyecto.iam.gserviceaccount.com"
+EE_ACCOUNT ="gee-service-account@ee-mawucano25.iam.gserviceaccount.com"
 EE_PRIVATE_KEY = '''
 -----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...
