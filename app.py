@@ -36,36 +36,32 @@ from google.oauth2 import service_account
 def initialize_earth_engine():
     """Inicializa Google Earth Engine con cuenta de servicio"""
     try:
-        # Verificar si ya está inicializado
-        try:
-            # Intentar acceder a una colección para ver si está inicializado
-            ee.ImageCollection('COPERNICUS/S2_SR').limit(1).getInfo()
-            st.success("✅ Google Earth Engine ya estaba inicializado")
-            return True
-        except Exception:
-            # Si no está inicializado, proceder con la inicialización
-            # Configurar credenciales desde secrets de Streamlit
-            credentials_dict = {
-                "type": "service_account",
-                "client_email": st.secrets["earth_engine"]["client_email"],
-                "private_key": st.secrets["earth_engine"]["private_key"].replace("\\n", "\n"),
-                "token_uri": "https://oauth2.googleapis.com/token"
-            }
-            
-            credentials = service_account.Credentials.from_service_account_info(
-                credentials_dict,
-                scopes=['https://www.googleapis.com/auth/earthengine']
-            )
-            
-            # Inicializar Earth Engine
-            ee.Initialize(credentials)
-            st.success("✅ Google Earth Engine inicializado correctamente")
-            return True
-            
+        # Configurar credenciales desde secrets de Streamlit
+        credentials_dict = {
+            "type": "service_account",
+            "client_email": st.secrets["earth_engine"]["client_email"],
+            "private_key": st.secrets["earth_engine"]["private_key"].replace("\\n", "\n"),
+            "token_uri": "https://oauth2.googleapis.com/token"
+        }
+        
+        credentials = service_account.Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=['https://www.googleapis.com/auth/earthengine']
+        )
+        
+        # Inicializar Earth Engine
+        ee.Initialize(credentials)
+        st.success("✅ Google Earth Engine inicializado correctamente")
+        return True
+        
     except Exception as e:
+        # Ignorar errores de "ya inicializado"
+        if "already initialized" in str(e).lower():
+            return True
         st.warning(f"⚠️ No se pudo inicializar Google Earth Engine: {str(e)}")
         st.info("ℹ️ Usando datos simulados como alternativa")
         return False
+
 # === INICIALIZACIÓN DE VARIABLES DE SESIÓN ===
 if 'reporte_completo' not in st.session_state:
     st.session_state.reporte_completo = None
