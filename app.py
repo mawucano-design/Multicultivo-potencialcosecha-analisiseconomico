@@ -2526,6 +2526,137 @@ def crear_boton_descarga_png(buffer, nombre_archivo, texto_boton="📥 Descargar
             file_name=nombre_archivo,
             mime="image/png"
         )
+# ===== FUNCIÓN PARA VISUALIZACIÓN RGB NATURAL CON GEEMAP =====
+def visualizar_rgb_gee(gdf, satelite, fecha_inicio, fecha_fin):
+    """Genera visualización RGB natural usando geemap/folium (compatible con Streamlit Cloud)"""
+    if not GEE_AVAILABLE or not st.session_state.gee_authenticated:
+        return None, "❌ Google Earth Engine no está autenticado"
+    
+    try:
+        # Obtener bounding box de la parcela
+        bounds = gdf.total_bounds
+        min_lon, min_lat, max_lon, max_lat = bounds
+        
+        # Crear geometría
+        geometry = ee.Geometry.Rectangle([min_lon, min_lat, max_lon, max_lat])
+        
+        # Formatear fechas
+        start_date = fecha_inicio.strftime('%Y-%m-%d')
+        end_date = fecha_fin.strftime('%Y-%m-%d')
+        
+        # Seleccionar colección y parámetros de visualización según satélite
+        if satelite == 'SENTINEL-2_GEE':
+            collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+            # RGB natural: B4 (rojo), B3 (verde), B2 (azul)
+            vis_params = {
+                'min': 0,
+                'max': 3000,
+                'bands': ['B4', 'B3', 'B2']
+            }
+            title = "Sentinel-2 RGB Natural (10m)"
+            
+        elif satelite == 'LANDSAT-8_GEE':
+            collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+            # RGB natural: SR_B4 (rojo), SR_B3 (verde), SR_B2 (azul)
+            # Landsat 8 necesita corrección de escala (factor 0.0000275 - 0.2)
+            vis_params = {
+                'min': 0,
+                'max': 3000,
+                'bands': ['SR_B4', 'SR_B3', 'SR_B2']
+            }
+            title = "Landsat 8 RGB Natural (30m)"
+            
+        elif satelite == 'LANDSAT-9_GEE':
+            collection = ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
+            vis_params = {
+                'min': 0,
+                'max': 3000,
+                'bands': ['SR_B4', 'SR_B3', 'SR_B2']
+            }
+            title = "Landsat 9 RGB Natural (30m)"
+            
+        else:
+            return None, "⚠️ Satélite no soportado para visualización RGB"
+        
+        # Filtrar colección
+        image = (collection
+                .filterBounds(geometry)
+                .filterDate(start_date, end_date)
+                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
+                .sort('CLOUDY_PIXEL_PERCENTAGE')
+                .first())
+        
+        if image is None:
+            return None, "⚠️ No se encontraron imágenes para el período y área seleccionados"
+        
+        # Obtener fecha de la imagen
+        fecha_imagen = image.get('system:time_start').getInfo()
+        if fecha_imagen:
+            fecha_str = datetime.fromtimestamp(fecha_imagen / 1000).strftime('%Y-%m-%d')
+            title += f" - {fecha_str}"
+        
+        # Crear mapa centrado en la parcela
+        import folium
+        centroid = gdf.geometry.unary_union.centroid
+        m = folium.Map(
+            location=[centroid.y, centroid.x],
+            zoom_start=14,
+            tiles=None,
+            control_scale=True
+        )
+        
+        # Agregar capas base
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='Esri World Imagery',
+            overlay=False,
+            control=True
+        ).add_to(m)
+        
+        # Agregar imagen RGB de GEE
+        try:
+            # Usar geemap para agregar la capa (más confiable que Map.addLayer)
+            import geemap.foliumap as geemap
+            Map = geemap.Map(center=[centroid.y, centroid.x], zoom=14, height=500)
+            Map.addLayer(image, vis_params, title)
+            Map.addLayer(ee.FeatureCollection(geometry), {'color': 'red'}, 'Parcela')
+            Map.centerObject(geometry, 14)
+            
+            # Convertir a folium para Streamlit
+            folium_map = Map.folium_map
+            
+            return folium_map, f"✅ {title}"
+            
+        except Exception as e:
+            # Fallback: usar folium directamente
+            map_id_dict = image.getMapId(vis_params)
+            folium.TileLayer(
+                tiles=f'https://earthengine.googleapis.com/map/{map_id_dict["mapid"]}/{{z}}/{{x}}/{{y}}?token={map_id_dict["token"]}',
+                attr='Google Earth Engine',
+                name=title,
+                overlay=True,
+                control=True
+            ).add_to(m)
+            
+            # Agregar parcela como overlay
+            folium.GeoJson(
+                gdf.__geo_interface__,
+                style_function=lambda x: {
+                    'fillColor': 'transparent',
+                    'color': 'red',
+                    'weight': 3,
+                    'opacity': 0.8
+                },
+                name='Parcela'
+            ).add_to(m)
+            
+            folium.LayerControl(collapsed=False).add_to(m)
+            
+            return m, f"✅ {title}"
+        
+    except Exception as e:
+        return None, f"❌ Error generando visualización RGB: {str(e)[:100]}"
 
 # ===== INTERFAZ PRINCIPAL =====
 st.title("ANALIZADOR MULTI-CULTIVO SATELITAL")
@@ -2891,44 +3022,122 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
         else:
             st.info("ℹ️ No hay datos topográficos disponibles para esta parcela")
     
-    with tab7:
-        st.subheader("🛰️ VISUALIZACIÓN SATELITAL")
+       with tab7:
+        st.subheader("🛰️ VISUALIZACIÓN SATELITAL RGB")
         
-        # Mostrar visualización GEE si está disponible
-        if satelite_seleccionado in ['SENTINEL-2_GEE', 'LANDSAT-8_GEE', 'LANDSAT-9_GEE']:
+        # Selector de tipo de visualización
+        col_viz1, col_viz2 = st.columns([2, 1])
+        with col_viz1:
+            tipo_viz = st.radio(
+                "Tipo de visualización:",
+                ["RGBO Natural", "Índices Espectrales"],
+                horizontal=True,
+                help="RGBO: Rojo-Verde-Azul-Oro (visualización natural) | Índices: NDVI, NDWI, etc."
+            )
+        
+        if tipo_viz == "RGBO Natural" and satelite_seleccionado in ['SENTINEL-2_GEE', 'LANDSAT-8_GEE', 'LANDSAT-9_GEE']:
             if st.session_state.gee_authenticated:
-                with st.spinner("Cargando imagen satelital de Google Earth Engine..."):
-                    html_map = visualizar_imagen_gee(
+                st.info(f"⏳ Cargando imagen RGB de {SATELITES_DISPONIBLES[satelite_seleccionado]['nombre']}...")
+                
+                # Generar visualización RGB
+                with st.spinner("Generando mapa interactivo..."):
+                    mapa_rgb, mensaje = visualizar_rgb_gee(
                         resultados['gdf_dividido'],
                         satelite_seleccionado,
                         fecha_inicio,
                         fecha_fin
                     )
-                    if html_map:
-                        st.markdown("### 🌍 Imagen Satelital (RGB)")
-                        st.components.v1.html(html_map, height=500)
+                
+                if mapa_rgb:
+                    st.success(mensaje)
+                    
+                    # Mostrar mapa interactivo
+                    st.markdown("### 🌍 Mapa RGB Natural")
+                    try:
+                        # Usar streamlit-folium para renderizar el mapa
+                        from streamlit_folium import st_folium
+                        output = st_folium(mapa_rgb, width=800, height=600, returned_objects=[])
                         
-                        # Mostrar información de la imagen
+                        # Mostrar información adicional
+                        st.markdown("### ℹ️ Información de la Imagen")
+                        col_info1, col_info2 = st.columns(2)
+                        
+                        with col_info1:
+                            st.write(f"**Satélite:** {SATELITES_DISPONIBLES[satelite_seleccionado]['nombre']}")
+                            st.write(f"**Banda RGB:** {', '.join(['Rojo', 'Verde', 'Azul'])}")
+                            st.write(f"**Resolución:** {SATELITES_DISPONIBLES[satelite_seleccionado]['resolucion']}")
+                        
+                        with col_info2:
+                            if resultados['datos_satelitales']:
+                                datos = resultados['datos_satelitales']
+                                st.write(f"**Índice principal:** {datos.get('indice', 'N/A')}")
+                                st.write(f"**Valor promedio:** {datos.get('valor_promedio', 0):.3f}")
+                                st.write(f"**Cobertura nubes:** {datos.get('cobertura_nubes', 'N/A')}")
+                        
+                        # Botón para descarga de screenshot (simulado)
+                        st.markdown("""
+                        <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 10px; margin-top: 20px;">
+                            <p style="color: #94a3b8; margin: 0; font-size: 0.9em;">
+                                💡 <strong>Nota:</strong> Este es un mapa interactivo en tiempo real desde 
+                                Google Earth Engine. Para guardar una captura:
+                            </p>
+                            <ol style="color: #cbd5e1; margin-top: 8px; padding-left: 20px; font-size: 0.9em;">
+                                <li>Haz clic derecho en el mapa</li>
+                                <li>Selecciona "Guardar imagen como..."</li>
+                                <li>O usa la tecla Impr Pant + herramienta de recorte</li>
+                            </ol>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error mostrando el mapa: {str(e)}")
+                        st.info("💡 Intentando método alternativo de visualización...")
+                        
+                        # Mostrar información en texto como fallback
                         if resultados['datos_satelitales']:
                             datos = resultados['datos_satelitales']
-                            st.markdown("### 📊 Información de la Imagen")
-                            col_info1, col_info2 = st.columns(2)
-                            with col_info1:
-                                st.write(f"**Satélite:** {datos['fuente']}")
-                                st.write(f"**Índice calculado:** {datos['indice']}")
-                                st.write(f"**Valor promedio:** {datos['valor_promedio']:.3f}")
-                            with col_info2:
-                                st.write(f"**Resolución:** {datos['resolucion']}")
-                                st.write(f"**Fecha descarga:** {datos['fecha_descarga']}")
-                                if 'cobertura_nubes' in datos:
-                                    st.write(f"**Cobertura de nubes:** {datos['cobertura_nubes']}%")
-                                st.write(f"**Rango:** {datos.get('valor_min', 0):.3f} - {datos.get('valor_max', 0):.3f}")
-                    else:
-                        st.warning("⚠️ No se pudo generar la visualización satelital")
+                            st.json({
+                                "satelite": satelite_seleccionado,
+                                "fuente": datos.get('fuente', 'N/A'),
+                                "indice": datos.get('indice', 'N/A'),
+                                "valor_promedio": datos.get('valor_promedio', 0),
+                                "fecha": datos.get('fecha_imagen', 'N/A'),
+                                "resolucion": datos.get('resolucion', 'N/A'),
+                                "estado": datos.get('estado', 'N/A')
+                            })
+                else:
+                    st.warning(mensaje)
+                    st.info("""
+                    🔍 **Consejos para mejorar la visualización:**
+                    - Amplía el rango temporal para encontrar imágenes con menos nubes
+                    - Selecciona una fecha específica con buen clima
+                    - Usa Landsat si Sentinel-2 tiene mucha cobertura de nubes
+                    """)
             else:
-                st.error("❌ No estás autenticado con Google Earth Engine")
+                st.error("❌ Google Earth Engine no está autenticado")
+                st.info("""
+                Para visualizar imágenes satelitales reales:
+                1. Configura el Secret `GEE_SERVICE_ACCOUNT` en Streamlit Cloud
+                2. Usa la versión GEE de los satélites (ej: SENTINEL-2_GEE)
+                3. Reinicia la app después de configurar el secret
+                """)
+        
         else:
-            st.info("ℹ️ Esta función solo está disponible para fuentes satelitales de Google Earth Engine")
+            st.info("ℹ️ La visualización RGB natural está disponible solo para fuentes GEE (Sentinel-2, Landsat-8/9)")
+            
+            # Mostrar datos satelitales disponibles como fallback
+            if resultados['datos_satelitales']:
+                st.markdown("### 📊 Datos Satelitales Disponibles")
+                datos = resultados['datos_satelitales']
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    st.write(f"**Fuente:** {datos.get('fuente', 'N/A')}")
+                    st.write(f"**Índice:** {datos.get('indice', 'N/A')}")
+                    st.write(f"**Valor:** {datos.get('valor_promedio', 0):.3f}")
+                with col_d2:
+                    st.write(f"**Fecha:** {datos.get('fecha_imagen', 'N/A')}")
+                    st.write(f"**Resolución:** {datos.get('resolucion', 'N/A')}")
+                    st.write(f"**Estado:** {datos.get('estado', 'N/A')}")
         
         st.markdown("---")
         st.subheader("💾 EXPORTAR RESULTADOS")
@@ -2991,7 +3200,6 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
                     if key not in ['gee_authenticated', 'gee_project']:
                         del st.session_state[key]
                 st.rerun()
-
 # ===== PIE DE PÁGINA =====
 st.markdown("---")
 col_footer1, col_footer2, col_footer3 = st.columns(3)
