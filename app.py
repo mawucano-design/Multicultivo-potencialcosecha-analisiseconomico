@@ -3022,7 +3022,7 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
         else:
             st.info("ℹ️ No hay datos topográficos disponibles para esta parcela")
     
-       with tab7:
+    with tab7:
         st.subheader("🛰️ VISUALIZACIÓN SATELITAL RGB")
         
         # Selector de tipo de visualización
