@@ -903,9 +903,8 @@ with st.sidebar:
     # Mostrar información del cultivo
     mostrar_info_cultivo(cultivo)
 
-    # Selector de variedad (ahora incluye nuevos cultivos)
-    variedades = VARIEDADES_ARGENTINA.get(cultivo, [])
-    if variedades:
+    
+        if variedades:
         variedad = st.selectbox(
             "Variedad/Cultivar:",
             ["No especificada"] + variedades,
