@@ -107,20 +107,93 @@ if 'gee_authenticated' not in st.session_state:
 if 'gee_project' not in st.session_state:
     st.session_state.gee_project = ''
 
-# === ESTILOS PERSONALIZADOS - VERSIÓN PREMIUM MODERNA ===
+# ===== ESTILOS PERSONALIZADOS - VERSIÓN COMPATIBLE CON STREAMLIT CLOUD =====
 st.markdown("""
+<style>
 /* === FONDO GENERAL OSCURO ELEGANTE === */
 .stApp {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
-    color: #ffffff !important;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #ffffff;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
+/* === BANNER HERO SIN IMÁGENES EXTERNAS (100% CSS) === */
+.hero-banner {
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98)),
+                radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.15), transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(16, 185, 129, 0.1), transparent 45%);
+    padding: 2.5em 1.5em;
+    border-radius: 20px;
+    margin-bottom: 2em;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+}
+
+.hero-banner::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, transparent 70%);
+    z-index: 0;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    padding: 1.5em;
+}
+
+.hero-title {
+    color: #ffffff;
+    font-size: 2.8em;
+    font-weight: 800;
+    margin-bottom: 0.5em;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+}
+
+.hero-subtitle {
+    color: #cbd5e1;
+    font-size: 1.2em;
+    font-weight: 400;
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.6;
+    opacity: 0.95;
+}
+
+/* === DECORACIÓN DEL BANNER (cultivos abstractos) === */
+.hero-banner::after {
+    content: '🌾 🌾 🌾 🌾 🌾 🌾 🌾 🌾 🌾 🌾';
+    position: absolute;
+    bottom: -15px;
+    left: 0;
+    right: 0;
+    font-size: 1.8em;
+    letter-spacing: 12px;
+    color: rgba(255, 255, 255, 0.15);
+    text-align: center;
+    z-index: 1;
+    transform: scale(1.2);
+}
+
 /* === SIDEBAR: FONDO BLANCO CON TEXTO NEGRO === */
 [data-testid="stSidebar"] {
     background: #ffffff !important;
-    border-right: 1px solid #e5e7eb !important;
-    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.1) !important;
+    border-right: 1px solid #e2e8f0 !important;
+    box-shadow: 2px 0 15px rgba(0, 0, 0, 0.08) !important;
 }
+
 /* Texto general del sidebar en NEGRO */
 [data-testid="stSidebar"] *,
 [data-testid="stSidebar"] .stMarkdown,
@@ -132,6 +205,7 @@ st.markdown("""
     color: #000000 !important;
     text-shadow: none !important;
 }
+
 /* Título del sidebar elegante */
 .sidebar-title {
     font-size: 1.4em;
@@ -142,51 +216,24 @@ st.markdown("""
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
     border-radius: 16px;
     color: #ffffff !important;
-    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.2);
     letter-spacing: 0.5px;
 }
-/* Widgets del sidebar con estilo glassmorphism */
+
+/* Widgets del sidebar */
 [data-testid="stSidebar"] .stSelectbox,
 [data-testid="stSidebar"] .stDateInput,
 [data-testid="stSidebar"] .stSlider {
-    background: rgba(255, 255, 255, 0.9) !important;
-    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(8px);
     border-radius: 12px;
     padding: 12px;
     margin: 8px 0;
     border: 1px solid #d1d5db !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
 }
-/* Labels de los widgets en negro */
-[data-testid="stSidebar"] .stSelectbox div,
-[data-testid="stSidebar"] .stDateInput div,
-[data-testid="stSidebar"] .stSlider label {
-    color: #000000 !important;
-    font-weight: 600;
-    font-size: 0.95em;
-}
-/* Inputs y selects - fondo blanco con texto negro */
-[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] {
-    background-color: #ffffff !important;
-    border: 1px solid #d1d5db !important;
-    color: #000000 !important;
-    border-radius: 8px;
-}
-/* Slider - colores negro */
-[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {
-    color: #000000 !important;
-}
-/* Date Input - fondo blanco con texto negro */
-[data-testid="stSidebar"] .stDateInput [data-baseweb="input"] {
-    background-color: #ffffff !important;
-    border: 1px solid #d1d5db !important;
-    color: #000000 !important;
-    border-radius: 8px;
-}
-/* Placeholder en gris */
-[data-testid="stSidebar"] .stDateInput [data-baseweb="input"]::placeholder {
-    color: #6b7280 !important;
-}
+
 /* Botones premium */
 .stButton > button {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
@@ -196,90 +243,46 @@ st.markdown("""
     border-radius: 12px !important;
     font-weight: 700 !important;
     font-size: 1em !important;
-    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
-    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35) !important;
+    transition: all 0.25s ease !important;
     text-transform: uppercase !important;
     letter-spacing: 0.5px !important;
 }
+
 .stButton > button:hover {
-    transform: translateY(-3px) !important;
-    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.6) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.45) !important;
     background: linear-gradient(135deg, #4f8df8 0%, #2d5fe8 100%) !important;
 }
-/* === HERO BANNER PRINCIPAL CON IMAGEN === */
-.hero-banner {
-    background: linear-gradient(rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.95)),
-    url('https://images.unsplash.com/photo-1597981309443-6e2d2a4d9c3f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80') !important;
-    background-size: cover !important;
-    background-position: center 40% !important;
-    padding: 3.5em 2em !important;
-    border-radius: 24px !important;
-    margin-bottom: 2.5em !important;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
-    position: relative !important;
-    overflow: hidden !important;
-}
-.hero-banner::before {
-    content: '' !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), rgba(29, 78, 216, 0.05)) !important;
-    z-index: 1 !important;
-}
-.hero-content {
-    position: relative !important;
-    z-index: 2 !important;
-    text-align: center !important;
-}
-.hero-title {
-    color: #ffffff !important;
-    font-size: 3.2em !important;
-    font-weight: 900 !important;
-    margin-bottom: 0.3em !important;
-    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
-    letter-spacing: -0.5px !important;
-    background: linear-gradient(135deg, #ffffff 0%, #93c5fd 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
-}
-.hero-subtitle {
-    color: #cbd5e1 !important;
-    font-size: 1.3em !important;
-    font-weight: 400 !important;
-    max-width: 800px !important;
-    margin: 0 auto !important;
-    line-height: 1.6 !important;
-}
-/* === PESTAÑAS PRINCIPALES (fuera del sidebar) === */
+
+/* === PESTAÑAS === */
 .stTabs [data-baseweb="tab-list"] {
-    background: rgba(255, 255, 255, 0.05) !important;
+    background: rgba(30, 41, 59, 0.7) !important;
     backdrop-filter: blur(10px) !important;
     padding: 8px 16px !important;
     border-radius: 16px !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    margin-top: 1em !important;
-    gap: 8px !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
+    margin-top: 1.5em !important;
+    gap: 6px !important;
 }
+
 .stTabs [data-baseweb="tab"] {
     color: #94a3b8 !important;
     font-weight: 600 !important;
-    padding: 12px 24px !important;
+    padding: 10px 20px !important;
     border-radius: 12px !important;
-    background: transparent !important;
-    transition: all 0.3s ease !important;
-    border: 1px solid transparent !important;
+    background: rgba(15, 23, 42, 0.6) !important;
+    transition: all 0.25s ease !important;
+    border: 1px solid rgba(56, 189, 248, 0.2) !important;
 }
+
 .stTabs [data-baseweb="tab"]:hover {
     color: #ffffff !important;
     background: rgba(59, 130, 246, 0.2) !important;
-    border-color: rgba(59, 130, 246, 0.3) !important;
-    transform: translateY(-2px) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
+    transform: translateY(-1px) !important;
 }
+
 .stTabs [aria-selected="true"] {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
     color: #ffffff !important;
@@ -287,98 +290,90 @@ st.markdown("""
     border: none !important;
     box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4) !important;
 }
-/* === MÉTRICAS PREMIUM === */
+
+/* === MÉTRICAS === */
 div[data-testid="metric-container"] {
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9)) !important;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
     backdrop-filter: blur(10px) !important;
-    border-radius: 20px !important;
-    padding: 24px !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    border-radius: 18px !important;
+    padding: 22px !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(59, 130, 246, 0.25) !important;
     transition: all 0.3s ease !important;
 }
+
 div[data-testid="metric-container"]:hover {
-    transform: translateY(-5px) !important;
-    box-shadow: 0 15px 40px rgba(59, 130, 246, 0.2) !important;
-    border-color: rgba(59, 130, 246, 0.4) !important;
+    transform: translateY(-4px) !important;
+    box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3) !important;
+    border-color: rgba(59, 130, 246, 0.45) !important;
 }
+
 div[data-testid="metric-container"] label,
 div[data-testid="metric-container"] div,
-div[data-testid="metric-container"] [data-testid="stMetricValue"], 
-div[data-testid="metric-container"] [data-testid="stMetricLabel"] {
+div[data-testid="metric-container"] [data-testid="stMetricValue"] { 
     color: #ffffff !important;
     font-weight: 600 !important;
 }
+
 div[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-size: 2.5em !important;
+    font-size: 2.3em !important;
     font-weight: 800 !important;
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
     -webkit-background-clip: text !important;
     -webkit-text-fill-color: transparent !important;
     background-clip: text !important;
 }
-/* === GRÁFICOS CON ESTILO OSCURO === */
-.stPlotlyChart, .stPyplot {
-    background: rgba(15, 23, 42, 0.8) !important;
-    backdrop-filter: blur(10px) !important;
-    border-radius: 20px !important;
-    padding: 20px !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
-}
-/* === TEXTOS GENERALES === */
-h1, h2, h3, h4, h5, h6 {
-    color: #ffffff !important;
-    font-weight: 800 !important;
-    margin-top: 1.5em !important;
-}
-p, div, span, label, li {
-    color: #cbd5e1 !important;
-    line-height: 1.7 !important;
-}
-/* === DATA FRAMES TABLAS ELEGANTES === */
+
+/* === DATAFRAMES === */
 .dataframe {
-    background: rgba(15, 23, 42, 0.8) !important;
-    backdrop-filter: blur(10px) !important;
-    border-radius: 16px !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    color: #ffffff !important;
+    background: rgba(15, 23, 42, 0.85) !important;
+    backdrop-filter: blur(8px) !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: #e2e8f0 !important;
+    font-size: 0.95em !important;
 }
+
 .dataframe th {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
     color: #ffffff !important;
     font-weight: 700 !important;
-    padding: 16px !important;
+    padding: 14px 16px !important;
 }
+
 .dataframe td {
     color: #cbd5e1 !important;
-    padding: 14px 16px !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    padding: 12px 16px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
-/* === ALERTS Y MENSAJES === */
-.stAlert {
-    border-radius: 16px !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    backdrop-filter: blur(10px) !important;
+
+/* === FOOTER === */
+.footer-divider {
+    margin: 2.5em 0 1.5em 0;
+    border-top: 1px solid rgba(59, 130, 246, 0.3);
 }
-/* === TARJETAS DE CULTIVOS === */
-.cultivo-card {
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
-    border-radius: 20px !important;
-    padding: 25px !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
-    transition: all 0.3s ease !important;
-    height: 100% !important;
+
+.footer-content {
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 1.8em;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    margin-top: 1.5em;
 }
-.cultivo-card:hover {
-    transform: translateY(-8px) !important;
-    box-shadow: 0 20px 40px rgba(59, 130, 246, 0.2) !important;
-    border-color: rgba(59, 130, 246, 0.4) !important;
+
+.footer-copyright {
+    text-align: center;
+    color: #94a3b8;
+    padding: 1.2em 0 0.8em 0;
+    font-size: 0.95em;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 1.5em;
 }
+</style>
 """, unsafe_allow_html=True)
 
-# ===== HERO BANNER PRINCIPAL =====
+# ===== BANNER HERO CORREGIDO (100% CSS - SIN IMÁGENES EXTERNAS) =====
 st.markdown("""
 <div class="hero-banner">
     <div class="hero-content">
@@ -387,7 +382,6 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
-
 # ===== CONFIGURACIÓN DE SATÉLITES DISPONIBLES =====
 SATELITES_DISPONIBLES = {
     'SENTINEL-2_GEE': {
