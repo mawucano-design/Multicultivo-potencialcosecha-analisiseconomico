@@ -904,7 +904,7 @@ with st.sidebar:
     mostrar_info_cultivo(cultivo)
 
     # Selector de variedad (CORREGIDO - indentación y lógica)
-    variedades = VARIEDADES_CULTIVO.get(cultivo, [])
+    variedades = VARIEDADES_CULTIVOS.get(cultivo, [])
     if variedades:
         variedad = st.selectbox(
             "Variedad/Cultivar:",
