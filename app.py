@@ -903,7 +903,9 @@ with st.sidebar:
     # Mostrar información del cultivo
     mostrar_info_cultivo(cultivo)
 
-     if variedades:
+    # Selector de variedad (ahora incluye nuevos cultivos)
+    variedades = VARIEDADES_ARGENTINA.get(cultivo, [])
+    if variedades:
         variedad = st.selectbox(
             "Variedad/Cultivar:",
             ["No especificada"] + variedades,
@@ -911,6 +913,8 @@ with st.sidebar:
         )
     else:
         variedad = "No especificada"
+    
+    # ... (resto de la configuración del sidebar) ...
     
     # Estado de GEE
     st.subheader("🌍 Google Earth Engine")
