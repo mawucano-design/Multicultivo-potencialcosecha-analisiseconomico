@@ -437,8 +437,8 @@ SATELITES_DISPONIBLES = {
     }
 }
 
-# ===== CONFIGURACIÓN VARIEDADES ARGENTINAS =====
-VARIEDADES_ARGENTINA = {
+# ===== CONFIGURACIÓN VARIEDADES CULTIVOS (ACTUALIZADO CON NUEVOS CULTIVOS) =====
+VARIEDADES_CULTIVOS = {
     'TRIGO': [
         'ACA 303', 'ACA 315', 'Baguette Premium 11', 'Baguette Premium 13',
         'Biointa 1005', 'Biointa 2004', 'Klein Don Enrique', 'Klein Guerrero',
@@ -468,10 +468,46 @@ VARIEDADES_ARGENTINA = {
         'ASEM 400', 'ASEM 500', 'Granoleico', 'Guasu',
         'Florman INTA', 'Elena', 'Colorado Irradiado', 'Overo Colorado',
         'Runner 886', 'Runner 890', 'Tegua', 'Virginia 98R'
+    ],
+    # NUEVOS CULTIVOS AGREGADOS
+    'VID': [
+        'Malbec', 'Cabernet Sauvignon', 'Merlot', 'Syrah', 'Chardonnay',
+        'Torrontés', 'Bonarda', 'Tempranillo', 'Sangiovese', 'Pinot Noir',
+        'Chenin', 'Sauvignon Blanc', 'Viognier', 'Carménère', 'Petit Verdot'
+    ],
+    'OLIVO': [
+        'Arbequina', 'Picual', 'Manzanilla', 'Hojiblanca', 'Cornicabra',
+        'Empeltre', 'Frantoio', 'Leccino', 'Coratina', 'Picholine',
+        'Kalamata', 'Mission', 'Ascolano', 'Barnea', 'Arbosana'
+    ],
+    'ALMENDRO': [
+        'Non Pareil', 'Carmel', 'Butte', 'Padre', 'Mission',
+        'Fritz', 'Monterey', 'Price', 'Aldrich', 'Wood Colony',
+        'Peerless', 'Thompson', 'Livingston', 'Sonora', 'Winters'
+    ],
+    'BANANO': [
+        'Cavendish', 'Gros Michel', 'Plátano', 'Manzano', 'Rojo',
+        'Morado', 'Baby Banana', 'Blue Java', 'Goldfinger', 'Pisang Awak',
+        'Mysore', 'Saba', 'Lakatan', 'Señorita', 'Dwarf Cavendish'
+    ],
+    'CAFE': [
+        'Arabica', 'Robusta', 'Liberica', 'Excelsa', 'Typica',
+        'Bourbon', 'Caturra', 'Catuai', 'Mundo Novo', 'Maragogipe',
+        'Geisha', 'Pacamara', 'SL-28', 'SL-34', 'Kona'
+    ],
+    'CACAO': [
+        'Forastero', 'Criollo', 'Trinitario', 'Nacional', 'Amelonado',
+        'Contamana', 'Marañón', 'Porcelana', 'Chuao', 'Carenero',
+        'Ocumare', 'Cundeamor', 'ICS-95', 'UF-613', 'TSH-565'
+    ],
+    'PALMA_ACEITERA': [
+        'Tenera', 'Dura', 'Pisifera', 'DxP', 'Yangambi',
+        'AVROS', 'La Mé', 'Ekona', 'Calabar', 'NIFOR',
+        'MARDI', 'CIRAD', 'ASD Costa Rica', 'Dami', 'Socfindo'
     ]
 }
 
-# ===== CONFIGURACIÓN NUEVOS CULTIVOS =====
+# ===== CONFIGURACIÓN PARÁMETROS CULTIVOS (ACTUALIZADO) =====
 PARAMETROS_CULTIVOS = {
     'TRIGO': {
         'NITROGENO': {'min': 100, 'max': 180},
@@ -484,7 +520,7 @@ PARAMETROS_CULTIVOS = {
         'RENDIMIENTO_OPTIMO': 4500,
         'COSTO_FERTILIZACION': 350,
         'PRECIO_VENTA': 0.25,
-        'VARIEDADES': VARIEDADES_ARGENTINA['TRIGO'],
+        'VARIEDADES': VARIEDADES_CULTIVOS['TRIGO'],
         'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
     },
     'MAIZ': {
@@ -498,7 +534,7 @@ PARAMETROS_CULTIVOS = {
         'RENDIMIENTO_OPTIMO': 8500,
         'COSTO_FERTILIZACION': 550,
         'PRECIO_VENTA': 0.20,
-        'VARIEDADES': VARIEDADES_ARGENTINA['MAIZ'],
+        'VARIEDADES': VARIEDADES_CULTIVOS['MAIZ'],
         'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste', 'Cuyo']
     },
     'SORGO': {
@@ -512,7 +548,7 @@ PARAMETROS_CULTIVOS = {
         'RENDIMIENTO_OPTIMO': 5000,
         'COSTO_FERTILIZACION': 300,
         'PRECIO_VENTA': 0.18,
-        'VARIEDADES': VARIEDADES_ARGENTINA['SORGO'],
+        'VARIEDADES': VARIEDADES_CULTIVOS['SORGO'],
         'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
     },
     'SOJA': {
@@ -526,7 +562,7 @@ PARAMETROS_CULTIVOS = {
         'RENDIMIENTO_OPTIMO': 3200,
         'COSTO_FERTILIZACION': 400,
         'PRECIO_VENTA': 0.45,
-        'VARIEDADES': VARIEDADES_ARGENTINA['SOJA'],
+        'VARIEDADES': VARIEDADES_CULTIVOS['SOJA'],
         'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
     },
     'GIRASOL': {
@@ -540,7 +576,7 @@ PARAMETROS_CULTIVOS = {
         'RENDIMIENTO_OPTIMO': 2800,
         'COSTO_FERTILIZACION': 320,
         'PRECIO_VENTA': 0.35,
-        'VARIEDADES': VARIEDADES_ARGENTINA['GIRASOL'],
+        'VARIEDADES': VARIEDADES_CULTIVOS['GIRASOL'],
         'ZONAS_ARGENTINA': ['Pampeana', 'Noroeste', 'Noreste']
     },
     'MANI': {
@@ -554,11 +590,111 @@ PARAMETROS_CULTIVOS = {
         'RENDIMIENTO_OPTIMO': 3800,
         'COSTO_FERTILIZACION': 380,
         'PRECIO_VENTA': 0.60,
-        'VARIEDADES': VARIEDADES_ARGENTINA['MANI'],
+        'VARIEDADES': VARIEDADES_CULTIVOS['MANI'],
         'ZONAS_ARGENTINA': ['Córdoba', 'San Luis', 'La Pampa']
+    },
+    # NUEVOS CULTIVOS AGREGADOS
+    'VID': {
+        'NITROGENO': {'min': 60, 'max': 120},
+        'FOSFORO': {'min': 30, 'max': 70},
+        'POTASIO': {'min': 150, 'max': 250},
+        'MATERIA_ORGANICA_OPTIMA': 2.5,
+        'HUMEDAD_OPTIMA': 0.35,
+        'NDVI_OPTIMO': 0.65,
+        'NDRE_OPTIMO': 0.35,
+        'RENDIMIENTO_OPTIMO': 15000,  # kg/ha de uva
+        'COSTO_FERTILIZACION': 800,
+        'PRECIO_VENTA': 0.80,  # USD/kg uva
+        'VARIEDADES': VARIEDADES_CULTIVOS['VID'],
+        'ZONAS_ARGENTINA': ['Mendoza', 'San Juan', 'La Rioja', 'Salta']
+    },
+    'OLIVO': {
+        'NITROGENO': {'min': 40, 'max': 100},
+        'FOSFORO': {'min': 20, 'max': 50},
+        'POTASIO': {'min': 100, 'max': 200},
+        'MATERIA_ORGANICA_OPTIMA': 2.0,
+        'HUMEDAD_OPTIMA': 0.25,
+        'NDVI_OPTIMO': 0.60,
+        'NDRE_OPTIMO': 0.30,
+        'RENDIMIENTO_OPTIMO': 8000,  # kg/ha de aceituna
+        'COSTO_FERTILIZACION': 600,
+        'PRECIO_VENTA': 1.20,  # USD/kg aceituna
+        'VARIEDADES': VARIEDADES_CULTIVOS['OLIVO'],
+        'ZONAS_ARGENTINA': ['La Rioja', 'Catamarca', 'San Juan', 'Mendoza']
+    },
+    'ALMENDRO': {
+        'NITROGENO': {'min': 80, 'max': 160},
+        'FOSFORO': {'min': 40, 'max': 80},
+        'POTASIO': {'min': 120, 'max': 200},
+        'MATERIA_ORGANICA_OPTIMA': 2.2,
+        'HUMEDAD_OPTIMA': 0.30,
+        'NDVI_OPTIMO': 0.62,
+        'NDRE_OPTIMO': 0.32,
+        'RENDIMIENTO_OPTIMO': 3000,  # kg/ha de almendra
+        'COSTO_FERTILIZACION': 700,
+        'PRECIO_VENTA': 4.50,  # USD/kg almendra
+        'VARIEDADES': VARIEDADES_CULTIVOS['ALMENDRO'],
+        'ZONAS_ARGENTINA': ['Río Negro', 'Neuquén', 'Mendoza', 'San Juan']
+    },
+    'BANANO': {
+        'NITROGENO': {'min': 200, 'max': 350},
+        'FOSFORO': {'min': 60, 'max': 120},
+        'POTASIO': {'min': 300, 'max': 500},
+        'MATERIA_ORGANICA_OPTIMA': 4.0,
+        'HUMEDAD_OPTIMA': 0.45,
+        'NDVI_OPTIMO': 0.78,
+        'NDRE_OPTIMO': 0.40,
+        'RENDIMIENTO_OPTIMO': 40000,  # kg/ha de banano
+        'COSTO_FERTILIZACION': 1200,
+        'PRECIO_VENTA': 0.30,  # USD/kg banano
+        'VARIEDADES': VARIEDADES_CULTIVOS['BANANO'],
+        'ZONAS_ARGENTINA': ['Formosa', 'Misiones', 'Corrientes']
+    },
+    'CAFE': {
+        'NITROGENO': {'min': 100, 'max': 200},
+        'FOSFORO': {'min': 40, 'max': 80},
+        'POTASIO': {'min': 150, 'max': 250},
+        'MATERIA_ORGANICA_OPTIMA': 3.5,
+        'HUMEDAD_OPTIMA': 0.40,
+        'NDVI_OPTIMO': 0.70,
+        'NDRE_OPTIMO': 0.38,
+        'RENDIMIENTO_OPTIMO': 2000,  # kg/ha de café verde
+        'COSTO_FERTILIZACION': 900,
+        'PRECIO_VENTA': 3.50,  # USD/kg café
+        'VARIEDADES': VARIEDADES_CULTIVOS['CAFE'],
+        'ZONAS_ARGENTINA': ['Misiones', 'Corrientes', 'Jujuy']
+    },
+    'CACAO': {
+        'NITROGENO': {'min': 80, 'max': 150},
+        'FOSFORO': {'min': 30, 'max': 60},
+        'POTASIO': {'min': 120, 'max': 200},
+        'MATERIA_ORGANICA_OPTIMA': 4.0,
+        'HUMEDAD_OPTIMA': 0.50,
+        'NDVI_OPTIMO': 0.72,
+        'NDRE_OPTIMO': 0.38,
+        'RENDIMIENTO_OPTIMO': 1500,  # kg/ha de cacao seco
+        'COSTO_FERTILIZACION': 850,
+        'PRECIO_VENTA': 5.00,  # USD/kg cacao
+        'VARIEDADES': VARIEDADES_CULTIVOS['CACAO'],
+        'ZONAS_ARGENTINA': ['Misiones', 'Corrientes', 'Formosa']
+    },
+    'PALMA_ACEITERA': {
+        'NITROGENO': {'min': 150, 'max': 250},
+        'FOSFORO': {'min': 50, 'max': 100},
+        'POTASIO': {'min': 200, 'max': 350},
+        'MATERIA_ORGANICA_OPTIMA': 3.8,
+        'HUMEDAD_OPTIMA': 0.55,
+        'NDVI_OPTIMO': 0.75,
+        'NDRE_OPTIMO': 0.42,
+        'RENDIMIENTO_OPTIMO': 20000,  # kg/ha de racimos
+        'COSTO_FERTILIZACION': 1100,
+        'PRECIO_VENTA': 0.40,  # USD/kg aceite
+        'VARIEDADES': VARIEDADES_CULTIVOS['PALMA_ACEITERA'],
+        'ZONAS_ARGENTINA': ['Formosa', 'Chaco', 'Misiones']
     }
 }
 
+# ===== CONFIGURACIÓN TEXTURA SUELO ÓPTIMA (ACTUALIZADO) =====
 TEXTURA_SUELO_OPTIMA = {
     'TRIGO': {
         'textura_optima': 'Franco-arcilloso',
@@ -607,25 +743,82 @@ TEXTURA_SUELO_OPTIMA = {
         'arcilla_optima': 15,
         'densidad_aparente_optima': 1.38,
         'porosidad_optima': 0.46
+    },
+    # NUEVOS CULTIVOS AGREGADOS
+    'VID': {
+        'textura_optima': 'Franco-arenoso',
+        'arena_optima': 50,
+        'limo_optima': 30,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.40,
+        'porosidad_optima': 0.50
+    },
+    'OLIVO': {
+        'textura_optima': 'Franco-arcilloso',
+        'arena_optima': 40,
+        'limo_optima': 35,
+        'arcilla_optima': 25,
+        'densidad_aparente_optima': 1.35,
+        'porosidad_optima': 0.48
+    },
+    'ALMENDRO': {
+        'textura_optima': 'Franco',
+        'arena_optima': 45,
+        'limo_optima': 35,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.38,
+        'porosidad_optima': 0.47
+    },
+    'BANANO': {
+        'textura_optima': 'Franco-arcilloso',
+        'arena_optima': 35,
+        'limo_optima': 40,
+        'arcilla_optima': 25,
+        'densidad_aparente_optima': 1.20,
+        'porosidad_optima': 0.55
+    },
+    'CAFE': {
+        'textura_optima': 'Franco',
+        'arena_optima': 40,
+        'limo_optima': 40,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.25,
+        'porosidad_optima': 0.52
+    },
+    'CACAO': {
+        'textura_optima': 'Franco-arcilloso',
+        'arena_optima': 30,
+        'limo_optima': 45,
+        'arcilla_optima': 25,
+        'densidad_aparente_optima': 1.15,
+        'porosidad_optima': 0.56
+    },
+    'PALMA_ACEITERA': {
+        'textura_optima': 'Franco',
+        'arena_optima': 45,
+        'limo_optima': 35,
+        'arcilla_optima': 20,
+        'densidad_aparente_optima': 1.30,
+        'porosidad_optima': 0.51
     }
 }
 
-CLASIFICACION_PENDIENTES = {
-    'PLANA (0-2%)': {'min': 0, 'max': 2, 'color': '#4daf4a', 'factor_erosivo': 0.1},
-    'SUAVE (2-5%)': {'min': 2, 'max': 5, 'color': '#a6d96a', 'factor_erosivo': 0.3},
-    'MODERADA (5-10%)': {'min': 5, 'max': 10, 'color': '#ffffbf', 'factor_erosivo': 0.6},
-    'FUERTE (10-15%)': {'min': 10, 'max': 15, 'color': '#fdae61', 'factor_erosivo': 0.8},
-    'MUY FUERTE (15-25%)': {'min': 15, 'max': 25, 'color': '#f46d43', 'factor_erosivo': 0.9},
-    'EXTREMA (>25%)': {'min': 25, 'max': 100, 'color': '#d73027', 'factor_erosivo': 1.0}
-}
-
+# ===== ICONOS Y COLORES PARA CULTIVOS (ACTUALIZADO) =====
 ICONOS_CULTIVOS = {
     'TRIGO': '🌾',
     'MAIZ': '🌽',
     'SORGO': '🌾',
     'SOJA': '🫘',
     'GIRASOL': '🌻',
-    'MANI': '🥜'
+    'MANI': '🥜',
+    # NUEVOS CULTIVOS
+    'VID': '🍇',
+    'OLIVO': '🫒',
+    'ALMENDRO': '🌰',
+    'BANANO': '🍌',
+    'CAFE': '☕',
+    'CACAO': '🍫',
+    'PALMA_ACEITERA': '🌴'
 }
 
 COLORES_CULTIVOS = {
@@ -634,7 +827,15 @@ COLORES_CULTIVOS = {
     'SORGO': '#8B4513',
     'SOJA': '#228B22',
     'GIRASOL': '#FFD700',
-    'MANI': '#D2691E'
+    'MANI': '#D2691E',
+    # NUEVOS CULTIVOS
+    'VID': '#8B0000',      # Rojo vino
+    'OLIVO': '#808000',    # Verde oliva
+    'ALMENDRO': '#D2B48C', # Beige
+    'BANANO': '#FFD700',   # Amarillo
+    'CAFE': '#8B4513',     # Marrón café
+    'CACAO': '#4A2C2A',    # Marrón chocolate
+    'PALMA_ACEITERA': '#32CD32'  # Verde lima
 }
 
 PALETAS_GEE = {
@@ -647,15 +848,20 @@ PALETAS_GEE = {
     'PENDIENTE': ['#4daf4a', '#a6d96a', '#ffffbf', '#fdae61', '#f46d43', '#d73027']
 }
 
-# ===== FUNCIÓN PARA MOSTRAR INFORMACIÓN DEL CULTIVO =====
+# ===== FUNCIÓN MEJORADA PARA MOSTRAR INFORMACIÓN DEL CULTIVO =====
 def mostrar_info_cultivo(cultivo):
     """Muestra información específica del cultivo seleccionado"""
     if cultivo in PARAMETROS_CULTIVOS:
         params = PARAMETROS_CULTIVOS[cultivo]
+        zonas = params.get('ZONAS_ARGENTINA', [])
+        
+        # Determinar si es cultivo argentino o internacional
+        es_argentino = any("Internacional" not in zona for zona in zonas)
+        
         st.markdown(f"""
         <div class="cultivo-card">
-            <h3>{ICONOS_CULTIVOS[cultivo]} {cultivo} - Información Argentina</h3>
-            <p><strong>Zonas principales:</strong> {', '.join(params.get('ZONAS_ARGENTINA', []))}</p>
+            <h3>{ICONOS_CULTIVOS[cultivo]} {cultivo} - Información {'Argentina' if es_argentino else 'Internacional'}</h3>
+            <p><strong>Región principal:</strong> {', '.join(zonas)}</p>
             <p><strong>Variedades comunes:</strong></p>
             <ul>
         """, unsafe_allow_html=True)
@@ -666,21 +872,38 @@ def mostrar_info_cultivo(cultivo):
         if len(params.get('VARIEDADES', [])) > 5:
             st.markdown(f"<li>... y {len(params.get('VARIEDADES', [])) - 5} más</li>", unsafe_allow_html=True)
         
-        st.markdown("""
+        # Agregar información adicional para cultivos internacionales
+        if not es_argentino:
+            st.markdown("""
             </ul>
-        </div>
+            <div style="background: rgba(59, 130, 246, 0.15); padding: 12px; border-radius: 8px; margin-top: 15px;">
+                <p style="margin: 0; font-size: 0.9em; color: #60a5fa;">
+                    💡 <strong>Nota:</strong> Este cultivo no es típico de Argentina. 
+                    Los parámetros están adaptados para zonas productoras internacionales.
+                </p>
+            </div>
         """, unsafe_allow_html=True)
+        else:
+            st.markdown("</ul>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ===== SIDEBAR MEJORADO (INTERFAZ VISUAL) =====
 with st.sidebar:
     st.markdown('<div class="sidebar-title">⚙️ CONFIGURACIÓN</div>', unsafe_allow_html=True)
     
-    cultivo = st.selectbox("Cultivo:", ["TRIGO", "MAIZ", "SORGO", "SOJA", "GIRASOL", "MANI"])
+    # Lista completa de cultivos (existentes + nuevos)
+    CULTIVOS_TOTALES = [
+        "TRIGO", "MAIZ", "SORGO", "SOJA", "GIRASOL", "MANI",
+        "VID", "OLIVO", "BANANO", "CACAO", "CAFE", "PALMA_ACEITERA"
+    ]
+    
+    cultivo = st.selectbox("Cultivo:", CULTIVOS_TOTALES)
     
     # Mostrar información del cultivo
     mostrar_info_cultivo(cultivo)
 
-    # Selector de variedad
+    # Selector de variedad (ahora incluye nuevos cultivos)
     variedades = VARIEDADES_ARGENTINA.get(cultivo, [])
     if variedades:
         variedad = st.selectbox(
