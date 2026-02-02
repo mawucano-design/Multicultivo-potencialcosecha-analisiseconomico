@@ -2734,7 +2734,7 @@ if st.session_state.analisis_completado and 'resultados_todos' in st.session_sta
         # Gráfico de costos
         st.subheader("📊 DISTRIBUCIÓN DE COSTOS")
         costos_n = resultados['gdf_completo']['costo_costo_nitrogeno'].sum()
-                costos_p = resultados['gdf_completo']['costo_costo_fosforo'].sum()
+        costos_p = resultados['gdf_completo']['costo_costo_fosforo'].sum()
         costos_k = resultados['gdf_completo']['costo_costo_potasio'].sum()
         otros = costo_total - (costos_n + costos_p + costos_k)
         
