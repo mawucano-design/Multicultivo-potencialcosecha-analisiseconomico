@@ -1537,61 +1537,85 @@ def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
     except Exception as e:
         return None
 
-# ===== FUNCIONES DEM SINTÉTICO Y CURVAS DE NIVEL =====
+# ===== FUNCIONES DEM SINTÉTICO Y CURVAS DE NIVEL - VERSIÓN MEJORADA =====
+
 def generar_dem_sintetico(gdf, resolucion=10.0):
-    """Genera un DEM sintético para análisis de terreno"""
+    """Genera un DEM sintético mejorado para análisis de terreno"""
     gdf = validar_y_corregir_crs(gdf)
     bounds = gdf.total_bounds
     minx, miny, maxx, maxy = bounds
     
-    # Crear grid
-    num_cells_x = int((maxx - minx) * 111000 / resolucion)  # 1 grado ≈ 111km
-    num_cells_y = int((maxy - miny) * 111000 / resolucion)
-    num_cells_x = max(50, min(num_cells_x, 200))
-    num_cells_y = max(50, min(num_cells_y, 200))
-
+    # Crear grid optimizado
+    num_cells_x = max(100, min(400, int((maxx - minx) * 111000 / resolucion)))
+    num_cells_y = max(100, min(400, int((maxy - miny) * 111000 / resolucion)))
+    
     x = np.linspace(minx, maxx, num_cells_x)
     y = np.linspace(miny, maxy, num_cells_y)
     X, Y = np.meshgrid(x, y)
 
-    # Generar terreno sintético
+    # Generar terreno sintético mejorado
     centroid = gdf.geometry.unary_union.centroid
-    seed_value = int(centroid.x * 10000 + centroid.y * 10000) % (2**32)
+    seed_value = int(abs(centroid.x * 10000 + centroid.y * 10000)) % (2**32)
     rng = np.random.RandomState(seed_value)
 
-    # Elevación base
-    elevacion_base = rng.uniform(100, 300)
+    # Elevación base para terrenos agrícolas
+    elevacion_base = rng.uniform(50, 200)  # Más realista para agricultura
 
-    # Pendiente general
-    slope_x = rng.uniform(-0.001, 0.001)
-    slope_y = rng.uniform(-0.001, 0.001)
+    # Pendiente regional suave
+    slope_x = rng.uniform(-0.0005, 0.0005)  # Pendiente muy suave
+    slope_y = rng.uniform(-0.0005, 0.0005)
 
-    # Relieve
+    # Relieve mejorado con múltiples escalas
     relief = np.zeros_like(X)
-    n_hills = rng.randint(3, 7)
+    
+    # Escala grande: colinas principales
+    n_hills = rng.randint(2, 5)
     for _ in range(n_hills):
-        hill_center_x = rng.uniform(minx, maxx)
-        hill_center_y = rng.uniform(miny, maxy)
-        hill_radius = rng.uniform(0.001, 0.005)
-        hill_height = rng.uniform(20, 80)
+        hill_center_x = rng.uniform(minx + 0.1*(maxx-minx), maxx - 0.1*(maxx-minx))
+        hill_center_y = rng.uniform(miny + 0.1*(maxy-miny), maxy - 0.1*(maxy-miny))
+        hill_radius = rng.uniform(0.002, 0.008)
+        hill_height = rng.uniform(15, 60)
         dist = np.sqrt((X - hill_center_x)**2 + (Y - hill_center_y)**2)
         relief += hill_height * np.exp(-(dist**2) / (2 * hill_radius**2))
 
-    # Valles
-    n_valleys = rng.randint(2, 5)
+    # Valles de drenaje
+    n_valleys = rng.randint(1, 3)
     for _ in range(n_valleys):
-        valley_center_x = rng.uniform(minx, maxx)
-        valley_center_y = rng.uniform(miny, maxy)
-        valley_radius = rng.uniform(0.002, 0.006)
-        valley_depth = rng.uniform(10, 40)
+        valley_center_x = rng.uniform(minx + 0.2*(maxx-minx), maxx - 0.2*(maxx-minx))
+        valley_center_y = rng.uniform(miny + 0.2*(maxy-miny), maxy - 0.2*(maxy-miny))
+        valley_radius = rng.uniform(0.003, 0.01)
+        valley_depth = rng.uniform(8, 25)
         dist = np.sqrt((X - valley_center_x)**2 + (Y - valley_center_y)**2)
-        relief -= valley_depth * np.exp(-(dist**2) / (2 * valley_radius**2))
+        valley = -valley_depth * np.exp(-(dist**2) / (2 * valley_radius**2))
+        relief += valley
 
-    # Ruido
-    noise = rng.randn(*X.shape) * 5
+    # Terrazas naturales para agricultura
+    n_terraces = rng.randint(1, 4)
+    for _ in range(n_terraces):
+        terrace_center_x = rng.uniform(minx + 0.3*(maxx-minx), maxx - 0.3*(maxx-minx))
+        terrace_center_y = rng.uniform(miny + 0.3*(maxy-miny), maxy - 0.3*(maxy-miny))
+        terrace_radius = rng.uniform(0.001, 0.004)
+        terrace_height = rng.uniform(1, 4)
+        dist = np.sqrt((X - terrace_center_x)**2 + (Y - terrace_center_y)**2)
+        terrace = terrace_height * np.exp(-(dist**2) / (2 * terrace_radius**2))
+        relief += terrace
 
+    # Ruido fractal mejorado
+    from scipy.ndimage import gaussian_filter
+    
+    # Ruido de baja frecuencia
+    noise_low = rng.randn(*X.shape) * 3
+    noise_low = gaussian_filter(noise_low, sigma=3)
+    
+    # Ruido de alta frecuencia
+    noise_high = rng.randn(*X.shape) * 1
+    noise_high = gaussian_filter(noise_high, sigma=1)
+    
+    noise = noise_low + noise_high
+
+    # Elevación final
     Z = elevacion_base + slope_x * (X - minx) + slope_y * (Y - miny) + relief + noise
-    Z = np.maximum(Z, 50)  # Evitar valores negativos
+    Z = np.maximum(Z, 10)  # Evitar valores negativos
 
     # Aplicar máscara de la parcela
     points = np.vstack([X.flatten(), Y.flatten()]).T
@@ -1599,66 +1623,286 @@ def generar_dem_sintetico(gdf, resolucion=10.0):
     parcel_mask = parcel_mask.reshape(X.shape)
 
     Z[~parcel_mask] = np.nan
+    
+    # Suavizado final
+    Z = gaussian_filter(Z, sigma=1)
+    
+    # Normalizar para terreno agrícola típico
+    Z_normalized = (Z - np.nanmin(Z)) / (np.nanmax(Z) - np.nanmin(Z)) * 250 + 50
+    Z = np.where(~np.isnan(Z), Z_normalized, np.nan)
 
     return X, Y, Z, bounds
 
 def calcular_pendiente(X, Y, Z, resolucion):
-    """Calcula pendiente a partir del DEM"""
-    # Calcular gradientes
-    dy = np.gradient(Z, axis=0) / resolucion
-    dx = np.gradient(Z, axis=1) / resolucion
-    # Calcular pendiente en porcentaje
-    pendiente = np.sqrt(dx**2 + dy**2) * 100
-    pendiente = np.clip(pendiente, 0, 100)
-
-    return pendiente
+    """Calcula pendiente mejorada a partir del DEM"""
+    # Calcular gradientes con mayor precisión
+    dy, dx = np.gradient(Z, resolucion, resolucion)
+    
+    # Calcular pendiente en porcentaje y grados
+    pendiente_porcentaje = np.sqrt(dx**2 + dy**2) * 100
+    pendiente_grados = np.degrees(np.arctan(pendiente_porcentaje / 100))
+    
+    # Suavizar pendientes
+    from scipy.ndimage import gaussian_filter
+    pendiente_porcentaje = gaussian_filter(pendiente_porcentaje, sigma=1)
+    pendiente_grados = gaussian_filter(pendiente_grados, sigma=1)
+    
+    # Clasificar pendientes
+    pendiente_clasificada = np.zeros_like(pendiente_porcentaje)
+    pendiente_clasificada[pendiente_porcentaje < 2] = 1  # Plano
+    pendiente_clasificada[(pendiente_porcentaje >= 2) & (pendiente_porcentaje < 5)] = 2  # Suave
+    pendiente_clasificada[(pendiente_porcentaje >= 5) & (pendiente_porcentaje < 10)] = 3  # Moderado
+    pendiente_clasificada[(pendiente_porcentaje >= 10) & (pendiente_porcentaje < 15)] = 4  # Moderado-fuerte
+    pendiente_clasificada[(pendiente_porcentaje >= 15) & (pendiente_porcentaje < 30)] = 5  # Fuerte
+    pendiente_clasificada[pendiente_porcentaje >= 30] = 6  # Muy fuerte
+    
+    # Aplicar máscara
+    pendiente_porcentaje[np.isnan(Z)] = np.nan
+    pendiente_grados[np.isnan(Z)] = np.nan
+    pendiente_clasificada[np.isnan(Z)] = 0
+    
+    return pendiente_porcentaje, pendiente_grados, pendiente_clasificada
 
 def generar_curvas_nivel(X, Y, Z, intervalo=5.0):
-    """Genera curvas de nivel a partir del DEM"""
+    """Genera curvas de nivel mejoradas a partir del DEM"""
     curvas_nivel = []
     elevaciones = []
-    # Calcular valores únicos de elevación para las curvas
+    
+    # Verificar datos válidos
+    if np.all(np.isnan(Z)):
+        return curvas_nivel, elevaciones
+    
     z_min = np.nanmin(Z)
     z_max = np.nanmax(Z)
+    
+    if np.isnan(z_min) or np.isnan(z_max) or (z_max - z_min) < intervalo * 0.5:
+        return curvas_nivel, elevaciones
+    
+    # Crear niveles de elevación
+    niveles = np.arange(
+        np.floor(z_min / intervalo) * intervalo,
+        np.ceil(z_max / intervalo) * intervalo + intervalo,
+        intervalo
+    )
+    
+    # Filtrar niveles dentro del rango
+    niveles = niveles[(niveles >= z_min) & (niveles <= z_max)]
+    
+    if len(niveles) == 0:
+        niveles = [np.nanmean(Z)]
+    
+    # Usar matplotlib para contornos más precisos
+    import matplotlib.pyplot as plt
+    
+    try:
+        # Crear figura temporal para extraer contornos
+        fig, ax = plt.subplots(figsize=(1, 1))
+        
+        # Generar contornos
+        contour_set = ax.contour(X, Y, Z, levels=niveles, colors='k', linewidths=0.5)
+        plt.close(fig)
+        
+        # Extraer paths de los contornos
+        for nivel, collection in zip(niveles, contour_set.collections):
+            paths = collection.get_paths()
+            for path in paths:
+                if len(path.vertices) > 2:
+                    # Suavizar la curva con spline
+                    try:
+                        from scipy.interpolate import splprep, splev
+                        tck, u = splprep([path.vertices[:, 0], path.vertices[:, 1]], s=0)
+                        u_new = np.linspace(u.min(), u.max(), len(u) * 2)
+                        x_new, y_new = splev(u_new, tck)
+                        vertices_suavizados = np.column_stack([x_new, y_new])
+                    except:
+                        vertices_suavizados = path.vertices
+                    
+                    # Crear LineString
+                    if len(vertices_suavizados) >= 2:
+                        linea = LineString(vertices_suavizados)
+                        if linea.length > 0.00001:  # Filtrar curvas muy cortas
+                            curvas_nivel.append(linea)
+                            elevaciones.append(nivel)
+        
+        # Ordenar por elevación
+        if curvas_nivel and elevaciones:
+            indices_ordenados = np.argsort(elevaciones)
+            curvas_nivel = [curvas_nivel[i] for i in indices_ordenados]
+            elevaciones = [elevaciones[i] for i in indices_ordenados]
+            
+    except Exception as e:
+        # Fallback al método original si hay error
+        print(f"Advertencia: usando método de curvas alternativo: {e}")
+        return generar_curvas_nivel_alternativo(X, Y, Z, intervalo)
+    
+    return curvas_nivel, elevaciones
 
+def generar_curvas_nivel_alternativo(X, Y, Z, intervalo=5.0):
+    """Método alternativo para generar curvas de nivel"""
+    curvas_nivel = []
+    elevaciones = []
+    
+    z_min = np.nanmin(Z)
+    z_max = np.nanmax(Z)
+    
     if np.isnan(z_min) or np.isnan(z_max):
         return curvas_nivel, elevaciones
-
+    
     niveles = np.arange(
         np.ceil(z_min / intervalo) * intervalo,
         np.floor(z_max / intervalo) * intervalo + intervalo,
         intervalo
     )
-
-    if len(niveles) == 0:
-        niveles = [z_min]
-
-    # Generar curvas de nivel
+    
     for nivel in niveles:
         # Crear máscara para el nivel
-        mascara = (Z >= nivel - 0.5) & (Z <= nivel + 0.5)
+        mascara = (Z >= nivel - intervalo/4) & (Z <= nivel + intervalo/4)
         
         if np.any(mascara):
-            # Encontrar contornos
             from scipy import ndimage
             estructura = ndimage.generate_binary_structure(2, 2)
             labeled, num_features = ndimage.label(mascara, structure=estructura)
             
             for i in range(1, num_features + 1):
-                # Extraer contorno
                 contorno = (labeled == i)
-                if np.sum(contorno) > 10:  # Filtrar contornos muy pequeños
-                    # Obtener coordenadas del contorno
+                if np.sum(contorno) > 20:  # Filtrar contornos muy pequeños
                     y_indices, x_indices = np.where(contorno)
-                    if len(x_indices) > 2:
-                        # Crear línea de contorno
+                    if len(x_indices) > 3:
                         puntos = np.column_stack([X[contorno].flatten(), Y[contorno].flatten()])
                         if len(puntos) >= 3:
-                            linea = LineString(puntos)
-                            curvas_nivel.append(linea)
-                            elevaciones.append(nivel)
-
+                            try:
+                                # Ordenar puntos para crear una polilínea continua
+                                from scipy.spatial import ConvexHull
+                                hull = ConvexHull(puntos)
+                                puntos_ordenados = puntos[hull.vertices]
+                                linea = LineString(puntos_ordenados)
+                                if linea.length > 0:
+                                    curvas_nivel.append(linea)
+                                    elevaciones.append(nivel)
+                            except:
+                                # Si falla convex hull, usar todos los puntos
+                                linea = LineString(puntos)
+                                if linea.length > 0:
+                                    curvas_nivel.append(linea)
+                                    elevaciones.append(nivel)
+    
     return curvas_nivel, elevaciones
+
+# ===== FUNCIONES ADICIONALES PARA ANÁLISIS TOPOGRÁFICO AVANZADO =====
+
+def calcular_aspecto(X, Y, Z, resolucion):
+    """Calcula la orientación de las laderas (aspecto)"""
+    dy, dx = np.gradient(Z, resolucion, resolucion)
+    
+    # Calcular aspecto en grados (0-360)
+    aspecto = np.degrees(np.arctan2(-dy, dx))
+    aspecto = np.mod(aspecto + 360, 360)  # Convertir a 0-360
+    
+    # Clasificar en direcciones cardinales
+    aspecto_clasificado = np.zeros_like(aspecto)
+    
+    # Norte (337.5-22.5)
+    norte_mask = (aspecto >= 337.5) | (aspecto < 22.5)
+    aspecto_clasificado[norte_mask] = 1
+    
+    # Noreste (22.5-67.5)
+    aspecto_clasificado[(aspecto >= 22.5) & (aspecto < 67.5)] = 2
+    
+    # Este (67.5-112.5)
+    aspecto_clasificado[(aspecto >= 67.5) & (aspecto < 112.5)] = 3
+    
+    # Sureste (112.5-157.5)
+    aspecto_clasificado[(aspecto >= 112.5) & (aspecto < 157.5)] = 4
+    
+    # Sur (157.5-202.5)
+    aspecto_clasificado[(aspecto >= 157.5) & (aspecto < 202.5)] = 5
+    
+    # Suroeste (202.5-247.5)
+    aspecto_clasificado[(aspecto >= 202.5) & (aspecto < 247.5)] = 6
+    
+    # Oeste (247.5-292.5)
+    aspecto_clasificado[(aspecto >= 247.5) & (aspecto < 292.5)] = 7
+    
+    # Noroeste (292.5-337.5)
+    aspecto_clasificado[(aspecto >= 292.5) & (aspecto < 337.5)] = 8
+    
+    return aspecto, aspecto_clasificado
+
+def crear_mapa_topografico_completo(X, Y, Z, curvas_nivel, elevaciones, gdf_original, intervalo=5.0):
+    """Crea un mapa topográfico completo con curvas de nivel"""
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        
+        # Subplot 1: Mapa de elevación con curvas de nivel
+        contourf = ax1.contourf(X, Y, Z, levels=30, cmap='terrain', alpha=0.8)
+        
+        # Dibujar curvas de nivel principales (múltiplos de 5)
+        if curvas_nivel:
+            for curva, elevacion in zip(curvas_nivel, elevaciones):
+                if elevacion % (intervalo * 5) == 0:  # Curvas principales
+                    coords = np.array(curva.coords)
+                    ax1.plot(coords[:, 0], coords[:, 1], 'k-', linewidth=1.2, alpha=0.8)
+                    # Etiquetar cada 5 curvas
+                    if len(coords) > 10:
+                        mid_idx = len(coords) // 2
+                        ax1.text(coords[mid_idx, 0], coords[mid_idx, 1], 
+                               f'{elevacion:.0f}m', fontsize=8, color='k',
+                               bbox=dict(boxstyle="round,pad=0.2", facecolor='white', alpha=0.9))
+                else:  # Curvas secundarias
+                    coords = np.array(curva.coords)
+                    ax1.plot(coords[:, 0], coords[:, 1], 'k-', linewidth=0.5, alpha=0.5)
+        
+        # Dibujar parcela original
+        gdf_original.plot(ax=ax1, color='none', edgecolor='red', linewidth=2, alpha=0.8)
+        
+        ax1.set_title('Mapa de Elevación y Curvas de Nivel', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Longitud')
+        ax1.set_ylabel('Latitud')
+        ax1.grid(True, alpha=0.3, linestyle='--')
+        
+        cbar1 = plt.colorbar(contourf, ax=ax1, shrink=0.8)
+        cbar1.set_label('Elevación (m.s.n.m.)', fontsize=10)
+        
+        # Subplot 2: Mapa de pendientes
+        pendiente_porcentaje, _, pendiente_clasificada = calcular_pendiente(X, Y, Z, 10)
+        
+        cmap_pend = plt.cm.YlOrRd
+        im_pend = ax2.imshow(pendiente_clasificada, extent=[X.min(), X.max(), Y.min(), Y.max()], 
+                           cmap=cmap_pend, alpha=0.8, origin='lower')
+        
+        # Leyenda de pendientes
+        from matplotlib.patches import Patch
+        leyenda_pend = [
+            Patch(facecolor=cmap_pend(0.1), label='Plano (<2%)'),
+            Patch(facecolor=cmap_pend(0.3), label='Suave (2-5%)'),
+            Patch(facecolor=cmap_pend(0.5), label='Moderado (5-10%)'),
+            Patch(facecolor=cmap_pend(0.7), label='Mod-Fuerte (10-15%)'),
+            Patch(facecolor=cmap_pend(0.9), label='Fuerte (15-30%)'),
+            Patch(facecolor=cmap_pend(1.0), label='Muy Fuerte (>30%)')
+        ]
+        ax2.legend(handles=leyenda_pend, title='Clasificación de Pendientes', 
+                  loc='upper left', fontsize=8, title_fontsize=9)
+        
+        ax2.set_title('Mapa de Pendientes Clasificadas', fontsize=14, fontweight='bold')
+        ax2.set_xlabel('Longitud')
+        ax2.set_ylabel('Latitud')
+        
+        plt.suptitle(f'ANÁLISIS TOPOGRÁFICO COMPLETO | Intervalo curvas: {intervalo}m', 
+                    fontsize=16, fontweight='bold', y=1.02)
+        
+        plt.tight_layout()
+        
+        # Guardar figura
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=200, bbox_inches='tight')
+        buf.seek(0)
+        plt.close()
+        
+        return buf
+        
+    except Exception as e:
+        st.error(f"❌ Error creando mapa topográfico: {str(e)}")
+        return None
 
 # ===== FUNCIONES DE ANÁLISIS COMPLETOS =====
 def analizar_fertilidad_actual(gdf_dividido, cultivo, datos_satelitales):
