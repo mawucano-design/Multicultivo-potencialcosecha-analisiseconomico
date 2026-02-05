@@ -960,6 +960,19 @@ with st.sidebar:
     st.subheader("🏔️ Configuración Curvas de Nivel")
     intervalo_curvas = st.slider("Intervalo entre curvas (metros):", 1.0, 20.0, 5.0, 1.0)
     resolucion_dem = st.slider("Resolución DEM (metros):", 5.0, 50.0, 10.0, 5.0)
+    
+    st.subheader("🌐 Fuente de Datos de Elevación")
+    fuente_dem = st.selectbox(
+        "Fuente DEM:",
+        ["NASA SRTM (Datos Reales)", "Sintético Mejorado", "ASTER GDEM"],
+        help="NASA SRTM: datos reales 30m | Sintético: simulación realista"
+    )
+    
+    usar_datos_reales = fuente_dem in ["NASA SRTM (Datos Reales)", "ASTER GDEM"]
+
+    st.subheader("📤 Subir Parcela")
+    uploaded_file = st.file_uploader("Subir archivo de tu parcela", type=['zip', 'kml', 'kmz'],
+                                     help="Formatos aceptados: Shapefile (.zip), KML (.kml), KMZ (.kmz)")
 
     st.subheader("📤 Subir Parcela")
     uploaded_file = st.file_uploader("Subir archivo de tu parcela", type=['zip', 'kml', 'kmz'],
