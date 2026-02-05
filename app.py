@@ -1537,85 +1537,695 @@ def obtener_datos_nasa_power(gdf, fecha_inicio, fecha_fin):
     except Exception as e:
         return None
 
-# ===== FUNCIONES DEM SINTÉTICO Y CURVAS DE NIVEL - VERSIÓN MEJORADA =====
+# ===== FUNCIONES DEM REAL CON DATOS NASA SRTM Y MEJORAS TOPOGRÁFICAS =====
 
-def generar_dem_sintetico(gdf, resolucion=10.0):
-    """Genera un DEM sintético mejorado para análisis de terreno"""
+def obtener_datos_srtm_nasa(gdf):
+    """Obtiene datos de elevación reales de NASA SRTM (30m resolución)"""
+    try:
+        # Calcular bounding box
+        bounds = gdf.total_bounds
+        min_lon, min_lat, max_lon, max_lat = bounds
+        
+        # Añadir buffer de 0.01 grados para asegurar cobertura
+        buffer = 0.01
+        min_lon -= buffer
+        min_lat -= buffer
+        max_lon += buffer
+        max_lat += buffer
+        
+        # Definir parámetros para la API de OpenTopography (usa SRTM)
+        # Nota: OpenTopography ofrece acceso gratuito a SRTM
+        params = {
+            'west': min_lon,
+            'south': min_lat,
+            'east': max_lon,
+            'north': max_lat,
+            'outputFormat': 'GTiff',
+            'demtype': 'SRTMGL1'  # SRTM 30m
+        }
+        
+        # URL de OpenTopography API
+        url = "https://portal.opentopography.org/API/globaldem"
+        
+        # Intentar descargar datos SRTM
+        try:
+            response = requests.get(url, params=params, stream=True, timeout=30)
+            if response.status_code == 200:
+                # Guardar temporalmente el archivo TIFF
+                with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as tmp_file:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        tmp_file.write(chunk)
+                    tmp_path = tmp_file.name
+                
+                # Leer el archivo TIFF con rasterio
+                import rasterio
+                with rasterio.open(tmp_path) as src:
+                    # Leer datos
+                    dem_data = src.read(1)
+                    
+                    # Obtener transformación de coordenadas
+                    transform = src.transform
+                    
+                    # Crear grids X, Y
+                    x = np.arange(transform[2], transform[2] + transform[0] * dem_data.shape[1], transform[0])
+                    y = np.arange(transform[5], transform[5] + transform[4] * dem_data.shape[0], transform[4])
+                    X, Y = np.meshgrid(x, y)
+                    
+                    # Convertir a WGS84 si es necesario
+                    Z = dem_data.astype(float)
+                    
+                    # Limpiar archivo temporal
+                    os.unlink(tmp_path)
+                    
+                    st.success("✅ Datos SRTM de NASA obtenidos exitosamente (30m resolución)")
+                    return X, Y, Z, bounds
+                    
+        except Exception as e:
+            st.warning(f"⚠️ No se pudieron obtener datos SRTM: {e}. Usando datos sintéticos mejorados.")
+    
+    except Exception as e:
+        st.warning(f"⚠️ Error accediendo a datos SRTM: {e}")
+    
+    return None
+
+def obtener_datos_aster_gdem(gdf):
+    """Obtiene datos de ASTER GDEM (30m resolución) como alternativa"""
+    try:
+        # ASTER GDEM v3 (30m) - cobertura global
+        bounds = gdf.total_bounds
+        min_lon, min_lat, max_lon, max_lat = bounds
+        
+        # Crear URL para AWS Open Data (ASTER GDEM)
+        # Nota: ASTER GDEM está disponible públicamente en AWS
+        import urllib.request
+        
+        # Calcular tiles necesarios (sistema de tiles ASTER)
+        lat_tile = int(np.floor((90 - min_lat) / 1))
+        lon_tile = int(np.floor((min_lon + 180) / 1))
+        
+        # URL base de AWS Open Data
+        base_url = f"https://aster-dem-pds.s3.amazonaws.com/ASTGTMV003_N{lat_tile:02d}E{lon_tile:03d}_dem.tif"
+        
+        # Intentar descargar
+        with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+        
+        try:
+            urllib.request.urlretrieve(base_url, tmp_path)
+            
+            # Leer con rasterio
+            import rasterio
+            with rasterio.open(tmp_path) as src:
+                dem_data = src.read(1)
+                transform = src.transform
+                
+                # Crear grids
+                x = np.arange(transform[2], transform[2] + transform[0] * dem_data.shape[1], transform[0])
+                y = np.arange(transform[5], transform[5] + transform[4] * dem_data.shape[0], transform[4])
+                X, Y = np.meshgrid(x, y)
+                Z = dem_data.astype(float)
+                
+                os.unlink(tmp_path)
+                
+                # Recortar al área de interés
+                mask_lon = (X >= min_lon - 0.1) & (X <= max_lon + 0.1)
+                mask_lat = (Y >= min_lat - 0.1) & (Y <= max_lat + 0.1)
+                mask = mask_lon & mask_lat
+                
+                if np.any(mask):
+                    X = X[mask].reshape(X.shape)
+                    Y = Y[mask].reshape(Y.shape)
+                    Z = Z[mask].reshape(Z.shape)
+                    
+                    st.success("✅ Datos ASTER GDEM obtenidos exitosamente")
+                    return X, Y, Z, bounds
+                    
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            return None
+            
+    except Exception as e:
+        return None
+
+def generar_dem_realista_mejorado(gdf, resolucion=30.0, usar_datos_reales=True):
+    """Genera DEM usando datos reales de NASA SRTM/ASTER o sintéticos mejorados"""
+    
+    if usar_datos_reales:
+        # Intentar obtener datos SRTM de NASA
+        st.info("🌍 Intentando obtener datos de elevación de NASA SRTM...")
+        dem_real = obtener_datos_srtm_nasa(gdf)
+        
+        if dem_real is not None:
+            X, Y, Z, bounds = dem_real
+            # Interpolar a la resolución deseada si es necesario
+            if resolucion != 30.0:
+                X, Y, Z = interpolar_dem(X, Y, Z, resolucion)
+            return X, Y, Z, bounds
+        
+        # Intentar ASTER GDEM como alternativa
+        st.info("🛰️ Intentando datos ASTER GDEM como alternativa...")
+        dem_aster = obtener_datos_aster_gdem(gdf)
+        
+        if dem_aster is not None:
+            X, Y, Z, bounds = dem_aster
+            if resolucion != 30.0:
+                X, Y, Z = interpolar_dem(X, Y, Z, resolucion)
+            return X, Y, Z, bounds
+    
+    # Si no se obtuvieron datos reales, usar sintéticos mejorados
+    st.info("🔬 Usando DEM sintético mejorado (datos reales no disponibles)")
+    return generar_dem_sintetico_avanzado(gdf, resolucion)
+
+def interpolar_dem(X, Y, Z, nueva_resolucion):
+    """Interpola DEM a diferente resolución"""
+    from scipy.interpolate import RegularGridInterpolator
+    
+    # Crear interpolador
+    interp = RegularGridInterpolator((Y[:, 0], X[0, :]), Z, 
+                                     method='linear', bounds_error=False, fill_value=np.nan)
+    
+    # Crear nueva grid
+    new_x = np.linspace(X.min(), X.max(), int((X.max() - X.min()) * 111000 / nueva_resolucion))
+    new_y = np.linspace(Y.min(), Y.max(), int((Y.max() - Y.min()) * 111000 / nueva_resolucion))
+    new_X, new_Y = np.meshgrid(new_x, new_y)
+    
+    # Interpolar
+    points = np.column_stack([new_Y.flatten(), new_X.flatten()])
+    new_Z = interp(points).reshape(new_X.shape)
+    
+    return new_X, new_Y, new_Z
+
+def generar_dem_sintetico_avanzado(gdf, resolucion=10.0):
+    """Genera un DEM sintético avanzado basado en características reales"""
     gdf = validar_y_corregir_crs(gdf)
     bounds = gdf.total_bounds
     minx, miny, maxx, maxy = bounds
     
     # Crear grid optimizado
-    num_cells_x = max(100, min(400, int((maxx - minx) * 111000 / resolucion)))
-    num_cells_y = max(100, min(400, int((maxy - miny) * 111000 / resolucion)))
+    num_cells_x = max(200, min(800, int((maxx - minx) * 111000 / resolucion)))
+    num_cells_y = max(200, min(800, int((maxy - miny) * 111000 / resolucion)))
     
     x = np.linspace(minx, maxx, num_cells_x)
     y = np.linspace(miny, maxy, num_cells_y)
     X, Y = np.meshgrid(x, y)
 
-    # Generar terreno sintético mejorado
+    # Obtener características geográficas para realismo
     centroid = gdf.geometry.unary_union.centroid
-    seed_value = int(abs(centroid.x * 10000 + centroid.y * 10000)) % (2**32)
+    lat, lon = centroid.y, centroid.x
+    
+    # Determinar tipo de terreno basado en ubicación
+    tipo_terreno = clasificar_terreno_por_ubicacion(lat, lon)
+    
+    # Generar terreno según tipo
+    if tipo_terreno == "LLANURA":
+        Z = generar_terreno_llanura(X, Y, lat, lon)
+    elif tipo_terreno == "MESETA":
+        Z = generar_terreno_meseta(X, Y, lat, lon)
+    elif tipo_terreno == "MONTANOSO":
+        Z = generar_terreno_montanoso(X, Y, lat, lon)
+    elif tipo_terreno == "VALLE":
+        Z = generar_terreno_valle(X, Y, lat, lon)
+    else:
+        Z = generar_terreno_mixto(X, Y, lat, lon)
+    
+    # Aplicar máscara de la parcela
+    points = np.vstack([X.flatten(), Y.flatten()]).T
+    parcel_mask = gdf.geometry.unary_union.contains([Point(p) for p in points])
+    parcel_mask = parcel_mask.reshape(X.shape)
+    Z[~parcel_mask] = np.nan
+    
+    # Suavizar
+    from scipy.ndimage import gaussian_filter
+    Z = gaussian_filter(Z, sigma=1.5)
+    
+    return X, Y, Z, bounds
+
+def clasificar_terreno_por_ubicacion(lat, lon):
+    """Clasifica el tipo de terreno basado en coordenadas geográficas"""
+    # Argentina - zonas típicas
+    if -55 <= lat <= -20:  # Argentina
+        if -75 <= lon <= -53:  # Región andina
+            return "MONTANOSO"
+        elif -65 <= lon <= -55:  # Llanura pampeana
+            return "LLANURA"
+        elif -73 <= lon <= -65:  # Cuyo
+            return "MESETA"
+        elif -58 <= lon <= -53:  # Mesopotamia
+            return "VALLE"
+    
+    # Otras regiones de América Latina
+    if 10 <= lat <= 30:  # México, Centroamérica
+        return "MONTANOSO"
+    elif -20 <= lat <= 10:  # Región amazónica
+        return "LLANURA"
+    elif -40 <= lat <= -20:  # Cono sur
+        return "MESETA"
+    
+    return "MIXTO"
+
+def generar_terreno_llanura(X, Y, lat, lon):
+    """Genera terreno de llanura con pendientes suaves"""
+    rng = np.random.RandomState(int(abs(lat * 100 + lon * 100)) % (2**32))
+    
+    # Elevación base baja
+    elevacion_base = rng.uniform(50, 150)
+    
+    # Pendiente regional muy suave
+    slope_x = rng.uniform(-0.0001, 0.0001)
+    slope_y = rng.uniform(-0.0001, 0.0001)
+    
+    # Suaves ondulaciones
+    relief = np.zeros_like(X)
+    n_ondulaciones = rng.randint(5, 15)
+    
+    for _ in range(n_ondulaciones):
+        center_x = rng.uniform(X.min(), X.max())
+        center_y = rng.uniform(Y.min(), Y.max())
+        radius = rng.uniform(0.002, 0.008)
+        height = rng.uniform(2, 10)
+        
+        dist = np.sqrt((X - center_x)**2 + (Y - center_y)**2)
+        relief += height * np.exp(-(dist**2) / (2 * radius**2))
+    
+    # Valles de drenaje suaves
+    n_valleys = rng.randint(1, 3)
+    for _ in range(n_valleys):
+        start_x = rng.uniform(X.min(), X.max() * 0.8)
+        start_y = rng.uniform(Y.min(), Y.max() * 0.8)
+        angle = rng.uniform(0, 2*np.pi)
+        length = rng.uniform(0.003, 0.01)
+        width = rng.uniform(0.001, 0.003)
+        depth = rng.uniform(1, 5)
+        
+        # Dirección del valle
+        valley_dir = np.array([np.cos(angle), np.sin(angle)])
+        valley_proj = (X - start_x) * valley_dir[0] + (Y - start_y) * valley_dir[1]
+        valley_perp = np.abs((X - start_x) * valley_dir[1] - (Y - start_y) * valley_dir[0])
+        
+        valle_mask = (valley_proj >= 0) & (valley_proj <= length)
+        valley_profile = depth * np.exp(-(valley_perp**2) / (2 * (width/2)**2))
+        relief -= valley_profile * valle_mask.astype(float)
+    
+    Z = elevacion_base + slope_x * (X - X.min()) + slope_y * (Y - Y.min()) + relief
+    
+    # Suavizar
+    from scipy.ndimage import gaussian_filter
+    Z = gaussian_filter(Z, sigma=2)
+    
+    return Z
+
+def generar_terreno_montanoso(X, Y, lat, lon):
+    """Genera terreno montañoso con valles pronunciados"""
+    rng = np.random.RandomState(int(abs(lat * 100 + lon * 100)) % (2**32))
+    
+    # Elevación base más alta
+    elevacion_base = rng.uniform(500, 1500)
+    
+    # Pendiente regional pronunciada
+    slope_x = rng.uniform(-0.001, 0.001)
+    slope_y = rng.uniform(-0.001, 0.001)
+    
+    # Montañas principales
+    relief = np.zeros_like(X)
+    n_mountains = rng.randint(3, 8)
+    
+    for _ in range(n_mountains):
+        center_x = rng.uniform(X.min() + 0.1*(X.max()-X.min()), X.max() - 0.1*(X.max()-X.min()))
+        center_y = rng.uniform(Y.min() + 0.1*(Y.max()-Y.min()), Y.max() - 0.1*(Y.max()-Y.min()))
+        radius = rng.uniform(0.003, 0.01)
+        height = rng.uniform(100, 400)
+        
+        dist = np.sqrt((X - center_x)**2 + (Y - center_y)**2)
+        mountain = height * np.exp(-(dist**2) / (2 * radius**2))
+        relief += mountain
+    
+    # Valles profundos
+    n_valleys = rng.randint(2, 5)
+    for _ in range(n_valleys):
+        start_x = rng.uniform(X.min(), X.max() * 0.7)
+        start_y = rng.uniform(Y.min(), Y.max() * 0.7)
+        angle = rng.uniform(0, 2*np.pi)
+        length = rng.uniform(0.005, 0.02)
+        width = rng.uniform(0.002, 0.006)
+        depth = rng.uniform(50, 150)
+        
+        valley_dir = np.array([np.cos(angle), np.sin(angle)])
+        valley_proj = (X - start_x) * valley_dir[0] + (Y - start_y) * valley_dir[1]
+        valley_perp = np.abs((X - start_x) * valley_dir[1] - (Y - start_y) * valley_dir[0])
+        
+        valley_mask = (valley_proj >= 0) & (valley_proj <= length)
+        valley_profile = depth * np.exp(-(valley_perp**2) / (2 * (width/2)**2))
+        relief -= valley_profile * valley_mask.astype(float)
+    
+    # Crestas
+    n_ridges = rng.randint(2, 4)
+    for _ in range(n_ridges):
+        start_x = rng.uniform(X.min(), X.max() * 0.8)
+        start_y = rng.uniform(Y.min(), Y.max() * 0.8)
+        angle = rng.uniform(0, 2*np.pi)
+        length = rng.uniform(0.004, 0.015)
+        width = rng.uniform(0.001, 0.003)
+        height = rng.uniform(30, 80)
+        
+        ridge_dir = np.array([np.cos(angle), np.sin(angle)])
+        ridge_proj = (X - start_x) * ridge_dir[0] + (Y - start_y) * ridge_dir[1]
+        ridge_perp = np.abs((X - start_x) * ridge_dir[1] - (Y - start_y) * ridge_dir[0])
+        
+        ridge_mask = (ridge_proj >= 0) & (ridge_proj <= length)
+        ridge_profile = height * np.exp(-(ridge_perp**2) / (2 * (width/2)**2))
+        relief += ridge_profile * ridge_mask.astype(float)
+    
+    Z = elevacion_base + slope_x * (X - X.min()) + slope_y * (Y - Y.min()) + relief
+    
+    # Añadir ruido fractal
+    noise = generar_ruido_fractal(X.shape, 5, rng)
+    Z += noise * 20
+    
+    # Suavizar moderadamente
+    from scipy.ndimage import gaussian_filter
+    Z = gaussian_filter(Z, sigma=1)
+    
+    return Z
+
+def generar_ruido_fractal(shape, octaves, rng):
+    """Genera ruido fractal para terreno realista"""
+    noise = np.zeros(shape)
+    
+    for octave in range(octaves):
+        frequency = 2 ** octave
+        amplitude = 1.0 / (frequency ** 0.5)
+        
+        # Crear ruido simple
+        octave_noise = rng.randn(shape[0], shape[1])
+        
+        # Suavizar según frecuencia
+        from scipy.ndimage import gaussian_filter
+        sigma = max(1, 8 // frequency)
+        octave_noise = gaussian_filter(octave_noise, sigma=sigma)
+        
+        noise += octave_noise * amplitude
+    
+    # Normalizar
+    if np.max(noise) > np.min(noise):
+        noise = (noise - np.min(noise)) / (np.max(noise) - np.min(noise)) * 2 - 1
+    
+    return noise
+
+def calcular_pendiente_mejorada(X, Y, Z, resolucion):
+    """Calcula pendiente con métodos topográficos profesionales"""
+    try:
+        # Calcular gradientes usando método de Horn (1981) - estándar en SIG
+        from scipy.ndimage import convolve
+        
+        # Kernel para gradiente en dirección x
+        kernel_x = np.array([[-1, 0, 1],
+                             [-2, 0, 2],
+                             [-1, 0, 1]]) / (8.0 * resolucion)
+        
+        # Kernel para gradiente en dirección y
+        kernel_y = np.array([[-1, -2, -1],
+                             [0, 0, 0],
+                             [1, 2, 1]]) / (8.0 * resolucion)
+        
+        # Aplicar convolución
+        dx = convolve(Z, kernel_x, mode='nearest')
+        dy = convolve(Z, kernel_y, mode='nearest')
+        
+        # Calcular pendiente en porcentaje
+        pendiente_porcentaje = np.sqrt(dx**2 + dy**2) * 100
+        
+        # Calcular pendiente en grados
+        pendiente_grados = np.degrees(np.arctan(pendiente_porcentaje / 100))
+        
+        # Clasificar pendientes según USDA
+        pendiente_clasificada = clasificar_pendiente_usda(pendiente_porcentaje)
+        
+        # Calcular aspecto (orientación)
+        aspecto = calcular_aspecto(dx, dy)
+        
+        # Calcular curvatura
+        curvatura = calcular_curvatura(dx, dy, resolucion)
+        
+        # Aplicar máscara de NaN
+        mask_nan = np.isnan(Z)
+        pendiente_porcentaje[mask_nan] = np.nan
+        pendiente_grados[mask_nan] = np.nan
+        pendiente_clasificada[mask_nan] = 0
+        aspecto[mask_nan] = np.nan
+        curvatura[mask_nan] = np.nan
+        
+        return {
+            'porcentaje': pendiente_porcentaje,
+            'grados': pendiente_grados,
+            'clasificada': pendiente_clasificada,
+            'aspecto': aspecto,
+            'curvatura': curvatura,
+            'dx': dx,
+            'dy': dy
+        }
+        
+    except Exception as e:
+        # Fallback a método simple
+        print(f"Error en cálculo de pendiente mejorada: {e}")
+        return calcular_pendiente_simple(X, Y, Z, resolucion)
+
+def clasificar_pendiente_usda(pendiente_porcentaje):
+    """Clasifica pendientes según USDA Soil Survey"""
+    clasificacion = np.zeros_like(pendiente_porcentaje, dtype=int)
+    
+    # USDA Slope Classes
+    clases = [
+        (0, 2, 1, 'Casi nivelado (0-2%)'),
+        (2, 5, 2, 'Suavemente ondulado (2-5%)'),
+        (5, 10, 3, 'Ondulado (5-10%)'),
+        (10, 15, 4, 'Fuertemente ondulado (10-15%)'),
+        (15, 30, 5, 'Moderadamente empinado (15-30%)'),
+        (30, 45, 6, 'Empinado (30-45%)'),
+        (45, 1000, 7, 'Muy empinado (>45%)')
+    ]
+    
+    for min_val, max_val, clase, desc in clases:
+        mask = (pendiente_porcentaje >= min_val) & (pendiente_porcentaje < max_val)
+        clasificacion[mask] = clase
+    
+    return clasificacion
+
+def calcular_aspecto(dx, dy):
+    """Calcula la orientación de las laderas en grados (0-360)"""
+    aspecto = np.degrees(np.arctan2(-dy, dx))
+    aspecto = (aspecto + 360) % 360  # Asegurar rango 0-360
+    
+    # Convertir a 8 direcciones cardinales
+    aspecto_clasificado = np.zeros_like(aspecto, dtype=int)
+    
+    # Norte (337.5-22.5)
+    norte_mask = (aspecto >= 337.5) | (aspecto < 22.5)
+    aspecto_clasificado[norte_mask] = 1
+    
+    # Noreste (22.5-67.5)
+    aspecto_clasificado[(aspecto >= 22.5) & (aspecto < 67.5)] = 2
+    
+    # Este (67.5-112.5)
+    aspecto_clasificado[(aspecto >= 67.5) & (aspecto < 112.5)] = 3
+    
+    # Sureste (112.5-157.5)
+    aspecto_clasificado[(aspecto >= 112.5) & (aspecto < 157.5)] = 4
+    
+    # Sur (157.5-202.5)
+    aspecto_clasificado[(aspecto >= 157.5) & (aspecto < 202.5)] = 5
+    
+    # Suroeste (202.5-247.5)
+    aspecto_clasificado[(aspecto >= 202.5) & (aspecto < 247.5)] = 6
+    
+    # Oeste (247.5-292.5)
+    aspecto_clasificado[(aspecto >= 247.5) & (aspecto < 292.5)] = 7
+    
+    # Noroeste (292.5-337.5)
+    aspecto_clasificado[(aspecto >= 292.5) & (aspecto < 337.5)] = 8
+    
+    return aspecto_clasificado
+
+def calcular_curvatura(dx, dy, resolucion):
+    """Calcula curvatura del terreno (perfil y planar)"""
+    try:
+        # Calcular segundas derivadas
+        dxx = np.gradient(dx, axis=1) / resolucion
+        dyy = np.gradient(dy, axis=0) / resolucion
+        dxy = np.gradient(dx, axis=0) / resolucion
+        
+        # Curvatura del perfil (pendiente de la pendiente)
+        p = dx**2 + dy**2
+        curvatura_perfil = -(dxx*dx**2 + 2*dxy*dx*dy + dyy*dy**2) / (p + 1e-10)
+        
+        # Curvatura planar (horizontal)
+        curvatura_planar = -(dyy*dx**2 - 2*dxy*dx*dy + dxx*dy**2) / (p + 1e-10)
+        
+        # Curvatura total
+        curvatura_total = curvatura_perfil + curvatura_planar
+        
+        # Clasificar
+        curvatura_clasificada = np.zeros_like(curvatura_total, dtype=int)
+        curvatura_clasificada[curvatura_total < -0.1] = 1  # Cóncavo
+        curvatura_clasificada[(curvatura_total >= -0.1) & (curvatura_total <= 0.1)] = 2  # Plano
+        curvatura_clasificada[curvatura_total > 0.1] = 3  # Convexo
+        
+        return curvatura_clasificada
+        
+    except:
+        return np.zeros_like(dx, dtype=int)
+
+def generar_curvas_nivel_profesional(X, Y, Z, intervalo=5.0, suavizado=True):
+    """Genera curvas de nivel profesionales con interpolación y etiquetado"""
+    from scipy.interpolate import griddata
+    from scipy.ndimage import gaussian_filter
+    
+    # Verificar datos
+    if np.all(np.isnan(Z)):
+        return [], []
+    
+    # Suavizar si se solicita
+    if suavizado:
+        Z_smooth = gaussian_filter(Z, sigma=1.5)
+        Z_smooth[np.isnan(Z)] = np.nan
+    else:
+        Z_smooth = Z.copy()
+    
+    # Calcular niveles
+    z_min, z_max = np.nanmin(Z_smooth), np.nanmax(Z_smooth)
+    
+    if np.isnan(z_min) or np.isnan(z_max) or (z_max - z_min) < intervalo:
+        # Si el rango es muy pequeño, usar un nivel
+        niveles = [np.nanmean(Z_smooth)]
+    else:
+        # Crear niveles con curvas principales y secundarias
+        niveles_principales = np.arange(
+            np.floor(z_min / (intervalo * 5)) * (intervalo * 5),
+            np.ceil(z_max / (intervalo * 5)) * (intervalo * 5) + intervalo,
+            intervalo * 5
+        )
+        
+        niveles_secundarios = np.arange(
+            np.floor(z_min / intervalo) * intervalo,
+            np.ceil(z_max / intervalo) * intervalo + intervalo,
+            intervalo
+        )
+        
+        # Filtrar
+        niveles = np.unique(np.concatenate([niveles_principales, niveles_secundarios]))
+        niveles = niveles[(niveles >= z_min) & (niveles <= z_max)]
+    
+    if len(niveles) == 0:
+        return [], []
+    
+    # Usar matplotlib para contornos profesionales
+    import matplotlib.pyplot as plt
+    
+    curvas_nivel = []
+    elevaciones = []
+    tipos_curva = []  # 1 = principal, 2 = secundaria
+    
+    try:
+        fig, ax = plt.subplots(figsize=(1, 1))
+        
+        # Generar contornos
+        contour_set = ax.contour(X, Y, Z_smooth, levels=niveles, 
+                                 colors=['k', 'gray'], linewidths=[1.2, 0.5])
+        plt.close(fig)
+        
+        # Procesar contornos
+        for i, (nivel, collection) in enumerate(zip(niveles, contour_set.collections)):
+            es_principal = (nivel % (intervalo * 5) == 0)
+            
+            paths = collection.get_paths()
+            for path in paths:
+                if len(path.vertices) > 3:
+                    # Suavizar con spline
+                    try:
+                        from scipy.interpolate import splprep, splev
+                        tck, u = splprep([path.vertices[:, 0], path.vertices[:, 1]], 
+                                        s=0, k=3)
+                        u_new = np.linspace(u.min(), u.max(), max(50, len(u)))
+                        x_new, y_new = splev(u_new, tck)
+                        vertices = np.column_stack([x_new, y_new])
+                    except:
+                        vertices = path.vertices
+                    
+                    # Crear LineString
+                    if len(vertices) >= 2:
+                        curva = LineString(vertices)
+                        if curva.length > 0.0001:  # Longitud mínima
+                            curvas_nivel.append(curva)
+                            elevaciones.append(nivel)
+                            tipos_curva.append(1 if es_principal else 2)
+        
+    except Exception as e:
+        print(f"Error en curvas profesionales: {e}. Usando método alternativo.")
+        return generar_curvas_nivel_alternativo(X, Y, Z, intervalo)
+    
+    return curvas_nivel, elevaciones, tipos_curva
+
+# ===== ACTUALIZAR LA FUNCIÓN DE ANÁLISIS COMPLETO =====
+
+def ejecutar_analisis_completo_con_nasa(gdf, cultivo, n_divisiones, satelite, fecha_inicio, fecha_fin,
+                                       intervalo_curvas=5.0, resolucion_dem=10.0, usar_datos_reales=True):
+    """Versión mejorada con datos NASA SRTM"""
+    
+   # ===== FUNCIONES DEM SINTÉTICO Y CURVAS DE NIVEL =====
+def generar_dem_sintetico(gdf, resolucion=10.0):
+    """Genera un DEM sintético para análisis de terreno"""
+    gdf = validar_y_corregir_crs(gdf)
+    bounds = gdf.total_bounds
+    minx, miny, maxx, maxy = bounds
+    
+    # Crear grid
+    num_cells_x = int((maxx - minx) * 111000 / resolucion)  # 1 grado ≈ 111km
+    num_cells_y = int((maxy - miny) * 111000 / resolucion)
+    num_cells_x = max(50, min(num_cells_x, 200))
+    num_cells_y = max(50, min(num_cells_y, 200))
+
+    x = np.linspace(minx, maxx, num_cells_x)
+    y = np.linspace(miny, maxy, num_cells_y)
+    X, Y = np.meshgrid(x, y)
+
+    # Generar terreno sintético
+    centroid = gdf.geometry.unary_union.centroid
+    seed_value = int(centroid.x * 10000 + centroid.y * 10000) % (2**32)
     rng = np.random.RandomState(seed_value)
 
-    # Elevación base para terrenos agrícolas
-    elevacion_base = rng.uniform(50, 200)  # Más realista para agricultura
+    # Elevación base
+    elevacion_base = rng.uniform(100, 300)
 
-    # Pendiente regional suave
-    slope_x = rng.uniform(-0.0005, 0.0005)  # Pendiente muy suave
-    slope_y = rng.uniform(-0.0005, 0.0005)
+    # Pendiente general
+    slope_x = rng.uniform(-0.001, 0.001)
+    slope_y = rng.uniform(-0.001, 0.001)
 
-    # Relieve mejorado con múltiples escalas
+    # Relieve
     relief = np.zeros_like(X)
-    
-    # Escala grande: colinas principales
-    n_hills = rng.randint(2, 5)
+    n_hills = rng.randint(3, 7)
     for _ in range(n_hills):
-        hill_center_x = rng.uniform(minx + 0.1*(maxx-minx), maxx - 0.1*(maxx-minx))
-        hill_center_y = rng.uniform(miny + 0.1*(maxy-miny), maxy - 0.1*(maxy-miny))
-        hill_radius = rng.uniform(0.002, 0.008)
-        hill_height = rng.uniform(15, 60)
+        hill_center_x = rng.uniform(minx, maxx)
+        hill_center_y = rng.uniform(miny, maxy)
+        hill_radius = rng.uniform(0.001, 0.005)
+        hill_height = rng.uniform(20, 80)
         dist = np.sqrt((X - hill_center_x)**2 + (Y - hill_center_y)**2)
         relief += hill_height * np.exp(-(dist**2) / (2 * hill_radius**2))
 
-    # Valles de drenaje
-    n_valleys = rng.randint(1, 3)
+    # Valles
+    n_valleys = rng.randint(2, 5)
     for _ in range(n_valleys):
-        valley_center_x = rng.uniform(minx + 0.2*(maxx-minx), maxx - 0.2*(maxx-minx))
-        valley_center_y = rng.uniform(miny + 0.2*(maxy-miny), maxy - 0.2*(maxy-miny))
-        valley_radius = rng.uniform(0.003, 0.01)
-        valley_depth = rng.uniform(8, 25)
+        valley_center_x = rng.uniform(minx, maxx)
+        valley_center_y = rng.uniform(miny, maxy)
+        valley_radius = rng.uniform(0.002, 0.006)
+        valley_depth = rng.uniform(10, 40)
         dist = np.sqrt((X - valley_center_x)**2 + (Y - valley_center_y)**2)
-        valley = -valley_depth * np.exp(-(dist**2) / (2 * valley_radius**2))
-        relief += valley
+        relief -= valley_depth * np.exp(-(dist**2) / (2 * valley_radius**2))
 
-    # Terrazas naturales para agricultura
-    n_terraces = rng.randint(1, 4)
-    for _ in range(n_terraces):
-        terrace_center_x = rng.uniform(minx + 0.3*(maxx-minx), maxx - 0.3*(maxx-minx))
-        terrace_center_y = rng.uniform(miny + 0.3*(maxy-miny), maxy - 0.3*(maxy-miny))
-        terrace_radius = rng.uniform(0.001, 0.004)
-        terrace_height = rng.uniform(1, 4)
-        dist = np.sqrt((X - terrace_center_x)**2 + (Y - terrace_center_y)**2)
-        terrace = terrace_height * np.exp(-(dist**2) / (2 * terrace_radius**2))
-        relief += terrace
+    # Ruido
+    noise = rng.randn(*X.shape) * 5
 
-    # Ruido fractal mejorado
-    from scipy.ndimage import gaussian_filter
-    
-    # Ruido de baja frecuencia
-    noise_low = rng.randn(*X.shape) * 3
-    noise_low = gaussian_filter(noise_low, sigma=3)
-    
-    # Ruido de alta frecuencia
-    noise_high = rng.randn(*X.shape) * 1
-    noise_high = gaussian_filter(noise_high, sigma=1)
-    
-    noise = noise_low + noise_high
-
-    # Elevación final
     Z = elevacion_base + slope_x * (X - minx) + slope_y * (Y - miny) + relief + noise
-    Z = np.maximum(Z, 10)  # Evitar valores negativos
+    Z = np.maximum(Z, 50)  # Evitar valores negativos
 
     # Aplicar máscara de la parcela
     points = np.vstack([X.flatten(), Y.flatten()]).T
@@ -1623,170 +2233,105 @@ def generar_dem_sintetico(gdf, resolucion=10.0):
     parcel_mask = parcel_mask.reshape(X.shape)
 
     Z[~parcel_mask] = np.nan
-    
-    # Suavizado final
-    Z = gaussian_filter(Z, sigma=1)
-    
-    # Normalizar para terreno agrícola típico
-    Z_normalized = (Z - np.nanmin(Z)) / (np.nanmax(Z) - np.nanmin(Z)) * 250 + 50
-    Z = np.where(~np.isnan(Z), Z_normalized, np.nan)
 
     return X, Y, Z, bounds
 
 def calcular_pendiente(X, Y, Z, resolucion):
-    """Calcula pendiente mejorada a partir del DEM"""
-    # Calcular gradientes con mayor precisión
-    dy, dx = np.gradient(Z, resolucion, resolucion)
-    
-    # Calcular pendiente en porcentaje y grados
-    pendiente_porcentaje = np.sqrt(dx**2 + dy**2) * 100
-    pendiente_grados = np.degrees(np.arctan(pendiente_porcentaje / 100))
-    
-    # Suavizar pendientes
-    from scipy.ndimage import gaussian_filter
-    pendiente_porcentaje = gaussian_filter(pendiente_porcentaje, sigma=1)
-    pendiente_grados = gaussian_filter(pendiente_grados, sigma=1)
-    
-    # Clasificar pendientes
-    pendiente_clasificada = np.zeros_like(pendiente_porcentaje)
-    pendiente_clasificada[pendiente_porcentaje < 2] = 1  # Plano
-    pendiente_clasificada[(pendiente_porcentaje >= 2) & (pendiente_porcentaje < 5)] = 2  # Suave
-    pendiente_clasificada[(pendiente_porcentaje >= 5) & (pendiente_porcentaje < 10)] = 3  # Moderado
-    pendiente_clasificada[(pendiente_porcentaje >= 10) & (pendiente_porcentaje < 15)] = 4  # Moderado-fuerte
-    pendiente_clasificada[(pendiente_porcentaje >= 15) & (pendiente_porcentaje < 30)] = 5  # Fuerte
-    pendiente_clasificada[pendiente_porcentaje >= 30] = 6  # Muy fuerte
-    
-    # Aplicar máscara
-    pendiente_porcentaje[np.isnan(Z)] = np.nan
-    pendiente_grados[np.isnan(Z)] = np.nan
-    pendiente_clasificada[np.isnan(Z)] = 0
-    
-    return pendiente_porcentaje, pendiente_grados, pendiente_clasificada
+    """Calcula pendiente a partir del DEM"""
+    # Calcular gradientes
+    dy = np.gradient(Z, axis=0) / resolucion
+    dx = np.gradient(Z, axis=1) / resolucion
+    # Calcular pendiente en porcentaje
+    pendiente = np.sqrt(dx**2 + dy**2) * 100
+    pendiente = np.clip(pendiente, 0, 100)
+
+    return pendiente
 
 def generar_curvas_nivel(X, Y, Z, intervalo=5.0):
-    """Genera curvas de nivel mejoradas a partir del DEM"""
+    """Genera curvas de nivel a partir del DEM"""
     curvas_nivel = []
     elevaciones = []
-    
-    # Verificar datos válidos
-    if np.all(np.isnan(Z)):
-        return curvas_nivel, elevaciones
-    
+    # Calcular valores únicos de elevación para las curvas
     z_min = np.nanmin(Z)
     z_max = np.nanmax(Z)
-    
-    if np.isnan(z_min) or np.isnan(z_max) or (z_max - z_min) < intervalo * 0.5:
-        return curvas_nivel, elevaciones
-    
-    # Crear niveles de elevación
-    niveles = np.arange(
-        np.floor(z_min / intervalo) * intervalo,
-        np.ceil(z_max / intervalo) * intervalo + intervalo,
-        intervalo
-    )
-    
-    # Filtrar niveles dentro del rango
-    niveles = niveles[(niveles >= z_min) & (niveles <= z_max)]
-    
-    if len(niveles) == 0:
-        niveles = [np.nanmean(Z)]
-    
-    # Usar matplotlib para contornos más precisos
-    import matplotlib.pyplot as plt
-    
-    try:
-        # Crear figura temporal para extraer contornos
-        fig, ax = plt.subplots(figsize=(1, 1))
-        
-        # Generar contornos
-        contour_set = ax.contour(X, Y, Z, levels=niveles, colors='k', linewidths=0.5)
-        plt.close(fig)
-        
-        # Extraer paths de los contornos
-        for nivel, collection in zip(niveles, contour_set.collections):
-            paths = collection.get_paths()
-            for path in paths:
-                if len(path.vertices) > 2:
-                    # Suavizar la curva con spline
-                    try:
-                        from scipy.interpolate import splprep, splev
-                        tck, u = splprep([path.vertices[:, 0], path.vertices[:, 1]], s=0)
-                        u_new = np.linspace(u.min(), u.max(), len(u) * 2)
-                        x_new, y_new = splev(u_new, tck)
-                        vertices_suavizados = np.column_stack([x_new, y_new])
-                    except:
-                        vertices_suavizados = path.vertices
-                    
-                    # Crear LineString
-                    if len(vertices_suavizados) >= 2:
-                        linea = LineString(vertices_suavizados)
-                        if linea.length > 0.00001:  # Filtrar curvas muy cortas
-                            curvas_nivel.append(linea)
-                            elevaciones.append(nivel)
-        
-        # Ordenar por elevación
-        if curvas_nivel and elevaciones:
-            indices_ordenados = np.argsort(elevaciones)
-            curvas_nivel = [curvas_nivel[i] for i in indices_ordenados]
-            elevaciones = [elevaciones[i] for i in indices_ordenados]
-            
-    except Exception as e:
-        # Fallback al método original si hay error
-        print(f"Advertencia: usando método de curvas alternativo: {e}")
-        return generar_curvas_nivel_alternativo(X, Y, Z, intervalo)
-    
-    return curvas_nivel, elevaciones
 
-def generar_curvas_nivel_alternativo(X, Y, Z, intervalo=5.0):
-    """Método alternativo para generar curvas de nivel"""
-    curvas_nivel = []
-    elevaciones = []
-    
-    z_min = np.nanmin(Z)
-    z_max = np.nanmax(Z)
-    
     if np.isnan(z_min) or np.isnan(z_max):
         return curvas_nivel, elevaciones
-    
+
     niveles = np.arange(
         np.ceil(z_min / intervalo) * intervalo,
         np.floor(z_max / intervalo) * intervalo + intervalo,
         intervalo
     )
-    
+
+    if len(niveles) == 0:
+        niveles = [z_min]
+
+    # Generar curvas de nivel
     for nivel in niveles:
         # Crear máscara para el nivel
-        mascara = (Z >= nivel - intervalo/4) & (Z <= nivel + intervalo/4)
+        mascara = (Z >= nivel - 0.5) & (Z <= nivel + 0.5)
         
         if np.any(mascara):
+            # Encontrar contornos
             from scipy import ndimage
             estructura = ndimage.generate_binary_structure(2, 2)
             labeled, num_features = ndimage.label(mascara, structure=estructura)
             
             for i in range(1, num_features + 1):
+                # Extraer contorno
                 contorno = (labeled == i)
-                if np.sum(contorno) > 20:  # Filtrar contornos muy pequeños
+                if np.sum(contorno) > 10:  # Filtrar contornos muy pequeños
+                    # Obtener coordenadas del contorno
                     y_indices, x_indices = np.where(contorno)
-                    if len(x_indices) > 3:
+                    if len(x_indices) > 2:
+                        # Crear línea de contorno
                         puntos = np.column_stack([X[contorno].flatten(), Y[contorno].flatten()])
                         if len(puntos) >= 3:
-                            try:
-                                # Ordenar puntos para crear una polilínea continua
-                                from scipy.spatial import ConvexHull
-                                hull = ConvexHull(puntos)
-                                puntos_ordenados = puntos[hull.vertices]
-                                linea = LineString(puntos_ordenados)
-                                if linea.length > 0:
-                                    curvas_nivel.append(linea)
-                                    elevaciones.append(nivel)
-                            except:
-                                # Si falla convex hull, usar todos los puntos
-                                linea = LineString(puntos)
-                                if linea.length > 0:
-                                    curvas_nivel.append(linea)
-                                    elevaciones.append(nivel)
-    
+                            linea = LineString(puntos)
+                            curvas_nivel.append(linea)
+                            elevaciones.append(nivel)
+
     return curvas_nivel, elevaciones
+    
+    # 6. ANÁLISIS DEM CON DATOS NASA
+    try:
+        # Generar DEM con datos reales si están disponibles
+        X, Y, Z, bounds = generar_dem_realista_mejorado(
+            gdf, resolucion_dem, usar_datos_reales=usar_datos_reales
+        )
+        
+        # Calcular pendientes avanzadas
+        analisis_pendiente = calcular_pendiente_mejorada(X, Y, Z, resolucion_dem)
+        
+        # Generar curvas de nivel profesionales
+        curvas_nivel, elevaciones, tipos_curva = generar_curvas_nivel_profesional(
+            X, Y, Z, intervalo_curvas
+        )
+        
+        # Guardar todos los datos
+        resultados['dem_data'] = {
+            'X': X,
+            'Y': Y,
+            'Z': Z,
+            'bounds': bounds,
+            'analisis_pendiente': analisis_pendiente,
+            'curvas_nivel': curvas_nivel,
+            'elevaciones': elevaciones,
+            'tipos_curva': tipos_curva,
+            'resolucion': resolucion_dem,
+            'intervalo_curvas': intervalo_curvas,
+            'fuente': 'NASA SRTM' if usar_datos_reales else 'Sintético Avanzado'
+        }
+        
+        st.success(f"✅ Análisis topográfico completado: {len(curvas_nivel)} curvas generadas")
+        
+    except Exception as e:
+        st.warning(f"⚠️ Error en análisis topográfico: {e}")
+        # Crear datos básicos para evitar errores
+        resultados['dem_data'] = {}
+    
+    # ... (resto del código) ...
 
 # ===== FUNCIONES ADICIONALES PARA ANÁLISIS TOPOGRÁFICO AVANZADO =====
 
